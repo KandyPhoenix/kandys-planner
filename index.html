@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a2e5a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Services Planner">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Paid Services Planner</title>
+<style>
+  :root{
+    --navy:#1a2e5a; --navy-dk:#101d3a; --gold:#c8900a; --teal:#2f9c95;
+    --cream:#f6f2e9; --ink:#1f2530; --muted:#6b7280; --line:#e6e2d8;
+    --red:#d64545; --amber:#e08a1e; --green:#2f9e57; --bg:#f3f1ea;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.45;padding-bottom:90px}
+  header{background:linear-gradient(135deg,var(--navy),var(--navy-dk));color:#fff;padding:18px 18px 16px;
+    position:sticky;top:0;z-index:20;box-shadow:0 2px 14px rgba(0,0,0,.18)}
+  header h1{margin:0;font-size:20px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+  header .sub{margin:2px 0 0;font-size:12.5px;opacity:.8}
+  .summary{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .chip{background:rgba(255,255,255,.12);border-radius:10px;padding:6px 11px;font-size:12px;display:flex;
+    flex-direction:column;min-width:62px}
+  .chip b{font-size:17px;line-height:1.1}
+  .chip.r b{color:#ff9a9a}.chip.a b{color:#ffd27a}.chip.g b{color:#a7e6bf}
+  .wrap{max-width:760px;margin:0 auto;padding:14px 14px 0}
+  .filters{display:flex;gap:7px;overflow-x:auto;padding:4px 0 10px;-webkit-overflow-scrolling:touch}
+  .fbtn{flex:0 0 auto;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:20px;
+    padding:6px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
+  .fbtn.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .bucket{margin:16px 0 4px;font-size:12px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;
+    color:var(--muted);display:flex;align-items:center;gap:8px}
+  .bucket .ln{flex:1;height:1px;background:var(--line)}
+  .card{background:#fff;border:1px solid var(--line);border-left:5px solid var(--teal);border-radius:12px;
+    padding:12px 13px;margin:8px 0;display:flex;align-items:flex-start;gap:11px;box-shadow:0 1px 4px rgba(20,30,60,.05)}
+  .card.over{border-left-color:var(--red)}.card.today{border-left-color:var(--amber)}
+  .card.done{opacity:.55}
+  .check{flex:0 0 auto;width:23px;height:23px;border-radius:50%;border:2px solid #c5cbd6;cursor:pointer;
+    margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;transition:.12s}
+  .check.on{background:var(--green);border-color:var(--green)}
+  .body{flex:1;min-width:0}
+  .title{font-weight:650;font-size:15px}
+  .title.done{text-decoration:line-through;color:var(--muted)}
+  .meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:5px;align-items:center}
+  .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:7px;background:#eef1f6;color:#46506b}
+  .tag.client{background:#1a2e5a;color:#fff}
+  .due{font-size:12px;color:var(--muted)}
+  .count{font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:7px;background:#eef6f5;color:var(--teal)}
+  .count.over{background:#fbe9e9;color:var(--red)}.count.today{background:#fdf0dd;color:var(--amber)}
+  .count.soon{background:#fdf0dd;color:var(--amber)}
+  .mini{border:none;background:none;color:#aeb4c0;font-size:15px;cursor:pointer;padding:2px}
+  .empty{text-align:center;color:var(--muted);padding:34px 10px;font-size:14px}
+  .fab{position:fixed;right:18px;bottom:20px;background:var(--gold);color:#fff;border:none;width:56px;height:56px;
+    border-radius:50%;font-size:30px;cursor:pointer;box-shadow:0 6px 18px rgba(200,144,10,.45);z-index:30}
+  .barbtn{position:fixed;left:50%;transform:translateX(-50%);bottom:26px;display:flex;gap:10px;z-index:25}
+  .ghost{background:#fff;border:1px solid var(--line);color:var(--navy);font-weight:700;border-radius:22px;
+    padding:10px 16px;font-size:13px;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.1)}
+  .ov{position:fixed;inset:0;background:rgba(16,29,58,.5);display:none;align-items:flex-end;justify-content:center;z-index:50}
+  .ov.show{display:flex}
+  .sheet{background:#fff;width:100%;max-width:760px;border-radius:18px 18px 0 0;padding:18px 18px 26px;
+    max-height:88vh;overflow:auto;animation:up .2s ease}
+  @keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:none;opacity:1}}
+  .sheet h2{margin:2px 0 14px;font-size:17px}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:11px 0 4px}
+  input,select{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:15px;
+    font-family:inherit;background:#fbfaf7}
+  .save{width:100%;background:var(--navy);color:#fff;border:none;border-radius:11px;padding:13px;font-size:15px;
+    font-weight:700;cursor:pointer;margin-top:18px}
+  .rule{border:1px solid var(--line);border-radius:11px;padding:11px;margin:9px 0;background:#fbfaf7}
+  .rule .rh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .rule .rt{font-weight:700;font-size:14px}
+  .rule .cfg{display:flex;gap:8px;margin-top:9px}
+  .rule .cfg>div{flex:1}
+  .sw{position:relative;width:42px;height:24px;flex:0 0 auto}
+  .sw input{opacity:0;width:0;height:0}
+  .sl{position:absolute;inset:0;background:#cfd4de;border-radius:24px;cursor:pointer;transition:.15s}
+  .sl:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+  .sw input:checked+.sl{background:var(--green)}.sw input:checked+.sl:before{transform:translateX(18px)}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:3px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 Paid Services Planner</h1>
+  <div class="sub">Client deliverables — what's due &amp; how long you've got</div>
+  <div class="summary" id="summary"></div>
+</header>
+
+<div class="wrap">
+  <div class="filters" id="filters"></div>
+  <div id="list"></div>
+</div>
+
+<button class="fab" onclick="openTask()">+</button>
+<div class="barbtn"><button class="ghost" onclick="openRules()">⚙ Recurring</button></div>
+
+<div class="ov" id="taskOv">
+  <div class="sheet">
+    <h2 id="taskTitle">Add deliverable</h2>
+    <label>What needs doing</label>
+    <input id="tTitle" placeholder="e.g. Publish blog post">
+    <label>Client</label>
+    <input id="tClient" placeholder="Lori" list="clients">
+    <datalist id="clients"></datalist>
+    <label>Type</label>
+    <select id="tType">
+      <option>Blog</option><option>Social</option><option>LinkedIn</option>
+      <option>SEO</option><option>Report</option><option>Other</option>
+    </select>
+    <label>Due date</label>
+    <input id="tDue" type="date">
+    <button class="save" onclick="saveTask()">Save</button>
+    <button class="save" style="background:#fff;color:var(--red);border:1px solid var(--line);margin-top:8px;display:none"
+      id="tDel" onclick="delTask()">Delete</button>
+  </div>
+</div>
+
+<div class="ov" id="ruleOv">
+  <div class="sheet">
+    <h2>⚙ Recurring deliverables</h2>
+    <div class="hint" style="margin-bottom:6px">These auto-fill your planner each week/month. Toggle off to pause one.</div>
+    <div id="ruleList"></div>
+    <button class="save" onclick="closeOv('ruleOv')">Done</button>
+  </div>
+</div>
+
+<script>
+const KEY='services_planner_v1';
+const WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const todayMid=()=>{const d=new Date();d.setHours(0,0,0,0);return d;};
+const iso=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);const x=new Date(y,m-1,d);x.setHours(0,0,0,0);return x;};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
+
+const DEFAULT={ rules:[], oneoffs:[], done:{} };
+let S=load();
+function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.rules)return r;}catch(e){}return JSON.parse(JSON.stringify(DEFAULT));}
+function save(){localStorage.setItem(KEY,JSON.stringify(S));}
+// Private one-time data import via #seed= (data travels in the link, never in the published code)
+(function(){if(location.hash.indexOf('#seed=')===0){try{const d=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(6)))));(d.rules||[]).forEach(r=>{if(!S.rules.find(x=>x.id===r.id))S.rules.push(r);});(d.oneoffs||[]).forEach(o=>{if(!S.oneoffs.find(x=>x.id===o.id))S.oneoffs.push(o);});save();history.replaceState(null,'',location.pathname);}catch(e){}}})();
+
+let filter='All';
+
+function genInstances(){
+  const start=todayMid(), end=addDays(start,70), out=[];
+  S.rules.forEach(r=>{
+    if(!r.active)return;
+    if(r.freq==='weekly'){
+      let d=new Date(start);
+      while(d<=end){ if(d.getDay()===r.dow) out.push(inst(r,d)); d=addDays(d,1); }
+    }else if(r.freq==='biweekly'){
+      let d=parse(r.anchor);
+      while(d<start) d=addDays(d,14);
+      while(d<=end){ out.push(inst(r,d)); d=addDays(d,14); }
+    }else if(r.freq==='monthly'){
+      let y=start.getFullYear(),m=start.getMonth();
+      for(let i=0;i<3;i++){const d=new Date(y,m+i,r.dom);d.setHours(0,0,0,0);if(d>=start&&d<=end)out.push(inst(r,d));}
+    }
+  });
+  return out;
+}
+function inst(r,d){const key=r.id+'|'+iso(d);return{key,ruleId:r.id,client:r.client,type:r.type,title:r.title,date:iso(d),done:!!S.done[key],recurring:true};}
+
+function allItems(){
+  const items=genInstances();
+  S.oneoffs.forEach(o=>items.push({key:'one|'+o.id,id:o.id,client:o.client,type:o.type,title:o.title,date:o.due,done:!!o.done,recurring:false}));
+  return items;
+}
+
+function render(){
+  const items=allItems().filter(i=>filter==='All'||i.client===filter);
+  const start=todayMid();
+  const all=allItems(), open=all.filter(i=>!i.done);
+  const over=open.filter(i=>parse(i.date)<start).length;
+  const tod=open.filter(i=>iso(parse(i.date))===iso(start)).length;
+  const wk=open.filter(i=>{const d=parse(i.date);return d>start&&d<=addDays(start,7);}).length;
+  document.getElementById('summary').innerHTML=
+    `<div class="chip r"><b>${over}</b>overdue</div><div class="chip a"><b>${tod}</b>today</div>`+
+    `<div class="chip"><b>${wk}</b>next 7d</div><div class="chip g"><b>${all.filter(i=>i.done).length}</b>done</div>`;
+  const clients=[...new Set(allItems().map(i=>i.client))];
+  document.getElementById('clients').innerHTML=clients.map(c=>`<option value="${c}">`).join('');
+  document.getElementById('filters').innerHTML=['All',...clients].map(c=>
+    `<button class="fbtn ${filter===c?'on':''}" onclick="filter='${c}';render()">${c}</button>`).join('');
+  const open2=items.filter(i=>!i.done).sort((a,b)=>a.date<b.date?-1:1);
+  const done=items.filter(i=>i.done).sort((a,b)=>a.date<b.date?1:-1).slice(0,12);
+  const buckets={'⚠️ Overdue':[],'📌 Today':[],'🗓️ Next 7 Days':[],'⏳ Upcoming':[]};
+  open2.forEach(i=>{const d=parse(i.date);
+    if(d<start)buckets['⚠️ Overdue'].push(i);
+    else if(iso(d)===iso(start))buckets['📌 Today'].push(i);
+    else if(d<=addDays(start,7))buckets['🗓️ Next 7 Days'].push(i);
+    else buckets['⏳ Upcoming'].push(i);});
+  let html='';
+  for(const b in buckets){ if(!buckets[b].length)continue;
+    html+=`<div class="bucket">${b}<span class="ln"></span></div>`+buckets[b].map(cardHTML).join(''); }
+  if(done.length) html+=`<div class="bucket">✅ Recently done<span class="ln"></span></div>`+done.map(cardHTML).join('');
+  if(!open2.length&&!done.length) html=`<div class="empty">Nothing here yet.<br>Tap <b>+</b> to add a deliverable.</div>`;
+  document.getElementById('list').innerHTML=html;
+}
+
+function cardHTML(i){
+  const start=todayMid(), d=parse(i.date), diff=Math.round((d-start)/86400000);
+  let cnt,cc='';
+  if(i.done){cnt='done';}
+  else if(diff<0){cnt=`overdue ${-diff}d`;cc='over';}
+  else if(diff===0){cnt='due today';cc='today';}
+  else if(diff<=3){cnt=`in ${diff}d`;cc='soon';}
+  else{cnt=`in ${diff}d`;}
+  const cls=i.done?'done':(diff<0?'over':(diff===0?'today':''));
+  const dlabel=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const edit=i.recurring?'':`<button class="mini" onclick="openTask('${i.id}')">✏️</button>`;
+  return `<div class="card ${cls}">
+    <div class="check ${i.done?'on':''}" onclick="toggle('${i.key}')">${i.done?'✓':''}</div>
+    <div class="body">
+      <div class="title ${i.done?'done':''}">${esc(i.title)}</div>
+      <div class="meta">
+        <span class="tag client">${esc(i.client)}</span>
+        <span class="tag">${esc(i.type)}</span>
+        <span class="due">${dlabel}</span>
+        ${i.done?'':`<span class="count ${cc}">${cnt}</span>`}
+        ${edit}
+      </div>
+    </div></div>`;
+}
+function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function toggle(key){
+  if(key.startsWith('one|')){const id=key.slice(4);const o=S.oneoffs.find(x=>x.id==id);if(o)o.done=!o.done;}
+  else{S.done[key]=!S.done[key];}
+  save();render();
+}
+
+let editId=null;
+function openTask(id){
+  editId=id||null;
+  document.getElementById('taskTitle').textContent=id?'Edit deliverable':'Add deliverable';
+  document.getElementById('tDel').style.display=id?'block':'none';
+  const o=id?S.oneoffs.find(x=>x.id==id):null;
+  document.getElementById('tTitle').value=o?o.title:'';
+  document.getElementById('tClient').value=o?o.client:(filter!=='All'?filter:'Lori');
+  document.getElementById('tType').value=o?o.type:'Other';
+  document.getElementById('tDue').value=o?o.due:iso(todayMid());
+  document.getElementById('taskOv').classList.add('show');
+}
+function saveTask(){
+  const t=document.getElementById('tTitle').value.trim();
+  if(!t){alert('Add a title');return;}
+  const data={title:t,client:document.getElementById('tClient').value.trim()||'Lori',
+    type:document.getElementById('tType').value,due:document.getElementById('tDue').value};
+  if(editId){Object.assign(S.oneoffs.find(x=>x.id==editId),data);}
+  else{data.id='o'+Date.now();data.done=false;S.oneoffs.push(data);}
+  save();closeOv('taskOv');render();
+}
+function delTask(){if(editId&&confirm('Delete this deliverable?')){S.oneoffs=S.oneoffs.filter(x=>x.id!=editId);save();closeOv('taskOv');render();}}
+
+function openRules(){renderRules();document.getElementById('ruleOv').classList.add('show');}
+function renderRules(){
+  const types=['Blog','Social','LinkedIn','SEO','Report','Other'];
+  document.getElementById('ruleList').innerHTML=S.rules.map((r,idx)=>{
+    let cfg='';
+    if(r.freq==='weekly'||r.freq==='biweekly'){
+      cfg=`<div><label>Day</label><select onchange="setRule(${idx},'dow',this.value)">${WD.map((w,wi)=>`<option value="${wi}" ${r.dow==wi?'selected':''}>${w}</option>`).join('')}</select></div>`;
+    }else{
+      cfg=`<div><label>Day of month</label><input type="number" min="1" max="28" value="${r.dom||24}" onchange="setRule(${idx},'dom',this.value)"></div>`;
+    }
+    const freq=`<div><label>Repeat</label><select onchange="setRule(${idx},'freq',this.value)">${['weekly','biweekly','monthly'].map(f=>`<option ${r.freq===f?'selected':''}>${f}</option>`).join('')}</select></div>`;
+    return `<div class="rule">
+      <div class="rh">
+        <input style="flex:1;font-weight:700;font-size:13px;padding:7px" value="${esc(r.client)}" placeholder="Client" onchange="setRule(${idx},'client',this.value)">
+        <label class="sw"><input type="checkbox" ${r.active?'checked':''} onchange="setRule(${idx},'active',this.checked)"><span class="sl"></span></label>
+        <button class="mini" title="Delete" onclick="delRule(${idx})">🗑️</button>
+      </div>
+      <input style="margin-top:6px;font-size:13px;padding:8px" value="${esc(r.title)}" placeholder="What needs doing" onchange="setRule(${idx},'title',this.value)">
+      <div class="cfg"><div><label>Type</label><select onchange="setRule(${idx},'type',this.value)">${types.map(t=>`<option ${r.type===t?'selected':''}>${t}</option>`).join('')}</select></div>${freq}${cfg}</div>
+    </div>`;
+  }).join('')+`<button class="ghost" style="position:static;transform:none;width:100%;margin-top:8px" onclick="addRule()">+ Add recurring deliverable</button>`;
+}
+function addRule(){S.rules.push({id:'r'+Date.now(),client:(filter!=='All'?filter:'Lori'),type:'Social',title:'New deliverable',freq:'weekly',dow:1,active:true});save();renderRules();render();}
+function delRule(idx){if(confirm('Delete this recurring deliverable?')){S.rules.splice(idx,1);save();renderRules();render();}}
+function setRule(idx,k,v){
+  if(k==='active')S.rules[idx][k]=v;
+  else if(k==='dow'||k==='dom')S.rules[idx][k]=+v;
+  else S.rules[idx][k]=v;
+  if(k==='freq'&&v==='monthly'&&!S.rules[idx].dom)S.rules[idx].dom=24;
+  if(k==='freq'&&(v==='weekly'||v==='biweekly')){if(S.rules[idx].dow==null)S.rules[idx].dow=1;if(v==='biweekly'&&!S.rules[idx].anchor)S.rules[idx].anchor=iso(todayMid());}
+  save();render();if(k==='freq'||k==='type')renderRules();
+}
+function closeOv(id){document.getElementById(id).classList.remove('show');}
+document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('show');}));
+
+render();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
+</script>
+</body>
+</html>
