@@ -1,6 +1,6 @@
 {
-  "name": "Paid Services Planner",
-  "short_name": "Planner",
+  "name": "Kandy's Planner",
+  "short_name": "Kandy's Planner",
   "description": "Client deliverables — what's due & how long you've got",
   "start_url": "./index.html",
   "scope": "./",
