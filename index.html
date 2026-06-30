@@ -10,6 +10,8 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Kandy's Planner</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --pink:#ff1c8d; --bg:#0c0c0f; --panel:#161619; --panel2:#1f1f24; --line:#2c2c34;
@@ -101,7 +103,7 @@
 </head>
 <body>
 <header>
-  <h1>📋 Kandy's <b>Planner</b></h1>
+  <h1>📋 Kandy's <b>Planner</b> <span id="syncBadge" style="font-size:11px;font-weight:600;color:var(--muted);margin-left:auto">☁ connecting…</span></h1>
   <div class="summary" id="summary"></div>
 </header>
 
@@ -187,7 +189,10 @@ var DEFAULT={rules:[
  {id:'jun-lisetup',client:'Lori',type:'Setup',title:'LinkedIn setup',due:'2026-06-29',amount:250,done:false}
 ],done:{}};
 function load(){try{var r=JSON.parse(localStorage.getItem(KEY));if(r&&r.rules)return r;}catch(e){}return JSON.parse(JSON.stringify(DEFAULT));}
-function save(){localStorage.setItem(KEY,JSON.stringify(S));}
+function save(){localStorage.setItem(KEY,JSON.stringify(S));cloudSave();}
+var docRef=null,cloudReady=false;
+function setSync(t){var b=document.getElementById('syncBadge');if(b)b.textContent=t;}
+function cloudSave(){if(docRef)docRef.set({json:JSON.stringify(S),updated:Date.now()}).then(function(){setSync('☁ Synced');}).catch(function(){setSync('⚠ saved on this device');});}
 var S=load();
 
 function decodeSeed(raw){
@@ -387,6 +392,22 @@ function closeOv(id){document.getElementById(id).classList.remove('show');}
 [].forEach.call(document.querySelectorAll('.ov'),function(o){o.addEventListener('click',function(e){if(e.target===o)o.classList.remove('show');});});
 
 render();
+
+// ---- Firebase cloud sync (Firestore, same project as Wellness Tracker) ----
+(function(){
+  try{
+    firebase.initializeApp({apiKey:"AIzaSyAxqkJiZL94gR3W5TBPTRNE5AdLyCDwb2g",authDomain:"wellness-tracker-127.firebaseapp.com",projectId:"wellness-tracker-127",storageBucket:"wellness-tracker-127.firebasestorage.app",messagingSenderId:"769681534889",appId:"1:769681534889:web:a273b28653892af4039eb8"});
+    var db=firebase.firestore();
+    docRef=db.collection('wellness').doc('servicesPlanner');
+    docRef.get().then(function(doc){
+      cloudReady=true;
+      if(doc.exists&&doc.data().json){try{S=JSON.parse(doc.data().json);localStorage.setItem(KEY,JSON.stringify(S));render();}catch(e){}setSync('☁ Synced');}
+      else{cloudSave();}
+      docRef.onSnapshot(function(snap){if(snap.exists&&snap.data().json){try{S=JSON.parse(snap.data().json);localStorage.setItem(KEY,JSON.stringify(S));render();setSync('☁ Synced');}catch(e){}}},function(){setSync('⚠ offline (local)');});
+    }).catch(function(){setSync('⚠ offline (local)');});
+  }catch(e){setSync('⚠ offline (local)');}
+})();
+
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}
 </script>
 </body>
