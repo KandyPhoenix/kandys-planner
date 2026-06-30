@@ -424,7 +424,9 @@ function openDay(){
   var list=fil(itemsIn(d,d)).sort(cmpItem);
   var openMins=sumDur(list.filter(function(i){return !i.done;}));
   document.getElementById('dayTitle').innerHTML=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+(openMins?' <span class="hdr-dur">· ~'+fmtDur(openMins)+' of work</span>':'');
-  document.getElementById('dayBody').innerHTML=list.length?list.map(function(i){return rowHTML(i,true);}).join(''):'<div style="color:var(--muted);padding:10px 0">Nothing due this day. Tap <b style="color:var(--pink)">+</b> to add.</div>';
+  var body=list.length?list.map(function(i){return rowHTML(i,true);}).join(''):'<div style="color:var(--muted);padding:10px 0">Nothing due this day yet.</div>';
+  body+='<button class="save" onclick="openTask()">+ Add to this day</button>';
+  document.getElementById('dayBody').innerHTML=body;
   document.getElementById('dayOv').classList.add('show');
 }
 function shiftMonth(n){viewM+=n;if(viewM<0){viewM=11;viewY--;}if(viewM>11){viewM=0;viewY++;}renderMonth();renderLegend();}
