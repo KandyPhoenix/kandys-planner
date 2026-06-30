@@ -210,12 +210,12 @@
 var KEY='services_planner_v1';
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','Setup','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
+var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
 // Colors grouped by EFFORT, not platform: quick posts share pink, long-form Blog pops purple
-var COL={Blog:'#a855f7',Social:'#ff1c8d',LinkedIn:'#ff1c8d',SEO:'#ffb020',Invoice:'#2dd4bf',Setup:'#f97316',Portal:'#eab308',Report:'#4a9fff',
+var COL={Blog:'#a855f7',Social:'#ff1c8d',LinkedIn:'#ff1c8d',SEO:'#ffb020',Invoice:'#2dd4bf','One-time':'#f97316',Portal:'#eab308',Report:'#4a9fff',
   Appointment:'#5eb0ff',Bill:'#ff6b6b',Birthday:'#f472b6',Health:'#34d399',Errand:'#a3a3ff',Personal:'#c084fc',Other:'#9a9aa6'};
 // Default time-needed (minutes) per type — used when a task has no explicit estimate
-var DEFAULT_MINS={Social:15,LinkedIn:15,Blog:120,Report:90,SEO:60,Portal:30,Invoice:10,Setup:60,Appointment:60,Bill:5,Health:60,Errand:30,Personal:30,Birthday:0,Other:30};
+var DEFAULT_MINS={Social:15,LinkedIn:15,Blog:120,Report:90,SEO:60,Portal:30,Invoice:10,'One-time':60,Appointment:60,Bill:5,Health:60,Errand:30,Personal:30,Birthday:0,Other:30};
 // Types whose $ amount is money going OUT (expense), not billable income
 var EXPENSE_TYPES=['Bill'];
 function isExpense(t){return EXPENSE_TYPES.indexOf(t)>=0;}
@@ -243,8 +243,8 @@ var DEFAULT={rules:[
  {id:'lori-portal',client:'Lori',type:'Portal',title:'Update client portal',freq:'monthly',dom:3,start:'2026-07-01',active:true}
 ],oneoffs:[
  {id:'jun-blog',client:'Lori',type:'Blog',title:'Blog post (Grief)',due:'2026-06-20',done:true},
- {id:'jun-smsetup',client:'Lori',type:'Setup',title:'Social media setup (FB + IG)',due:'2026-06-29',amount:200,done:true},
- {id:'jun-lisetup',client:'Lori',type:'Setup',title:'LinkedIn setup',due:'2026-06-29',amount:250,done:false},
+ {id:'jun-smsetup',client:'Lori',type:'One-time',title:'Social media setup (FB + IG)',due:'2026-06-29',amount:200,done:true},
+ {id:'jun-lisetup',client:'Lori',type:'One-time',title:'LinkedIn setup',due:'2026-06-29',amount:250,done:false},
  {id:'jun-seo',client:'Lori',type:'Invoice',title:'SEO package invoice',due:'2026-06-01',amount:575,done:true}
 ],done:{},skip:{},subs:{}};
 function load(){try{var r=JSON.parse(localStorage.getItem(KEY));if(r&&r.rules){if(!r.skip)r.skip={};if(!r.done)r.done={};if(!r.subs)r.subs={};return r;}}catch(e){}return JSON.parse(JSON.stringify(DEFAULT));}
@@ -260,9 +260,9 @@ function ensureShape(o){
     ].forEach(function(s){if(!o.rules.some(function(x){return x.id===s.id;}))o.rules.push(s);});
     o.seededLife=true;
   }
-  // Wedding type retired → Personal (covers any already-synced data)
-  o.rules.forEach(function(r){if(r.type==='Wedding')r.type='Personal';});
-  o.oneoffs.forEach(function(x){if(x.type==='Wedding')x.type='Personal';});
+  // Retired types → new names (covers any already-synced data)
+  o.rules.forEach(function(r){if(r.type==='Wedding')r.type='Personal';if(r.type==='Setup')r.type='One-time';});
+  o.oneoffs.forEach(function(x){if(x.type==='Wedding')x.type='Personal';if(x.type==='Setup')x.type='One-time';});
   return o;
 }
 var S=ensureShape(load());
