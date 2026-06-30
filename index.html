@@ -111,7 +111,7 @@
   </div>
   <div class="dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
   <div class="cal" id="cal"></div>
-  <div class="dayp" id="dayp"></div>
+  <div class="hint" style="text-align:center;margin:12px 0 0">Tap any day to see &amp; check off what's due</div>
 </div>
 
 <button class="fab" onclick="openTask()">+</button>
@@ -134,6 +134,12 @@
   <div class="hint" style="margin-bottom:6px">Auto-fill the calendar each week/month. Toggle off to pause.</div>
   <div id="ruleList"></div>
   <button class="save" onclick="closeOv('ruleOv')">Done</button>
+</div></div>
+
+<div class="ov" id="dayOv"><div class="sheet">
+  <button class="xclose" onclick="closeOv('dayOv')">✕</button>
+  <h2 id="dayTitle"></h2>
+  <div id="dayBody"></div>
 </div></div>
 
 <div class="ov" id="impOv"><div class="sheet">
@@ -203,7 +209,7 @@ function itemsIn(start,end){
   return items;
 }
 
-function render(){renderSummary();renderCal();renderDay();}
+function render(){renderSummary();renderCal();if(document.getElementById('dayOv').classList.contains('show'))openDay();}
 
 function renderSummary(){
   var start=todayMid();
@@ -238,21 +244,23 @@ function renderCal(){
   document.getElementById('cal').innerHTML=html;
 }
 
-function renderDay(){
-  var d=parse(selDate), start=todayMid();
+function openDay(){
+  var d=parse(selDate);
+  document.getElementById('dayTitle').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
   var list=itemsIn(d,d).sort(function(a,b){return a.done-b.done;});
-  var head='<h3>'+d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</h3>';
-  if(!list.length){document.getElementById('dayp').innerHTML=head+'<div class="none">Nothing due. Tap <b style="color:var(--pink)">+</b> to add.</div>';return;}
-  var rows=list.map(function(i){
-    var editb=i.recurring?'':'<button class="mini" onclick="event.stopPropagation();openTask(\''+i.id+'\')">✏️</button>';
+  var body;
+  if(!list.length)body='<div style="color:var(--muted);padding:10px 0">Nothing due this day. Tap <b style="color:var(--pink)">+</b> to add one.</div>';
+  else body=list.map(function(i){
+    var editb=i.recurring?'':'<button class="mini" onclick="closeOv(\'dayOv\');openTask(\''+i.id+'\')">✏️</button>';
     return '<div class="row"><div class="check '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div>'+
       '<div class="rtitle '+(i.done?'done':'')+'">'+esc(i.title)+'</div>'+
       '<span class="tg" style="background:'+typeColor(i.type)+'">'+esc(i.type)+'</span>'+editb+'</div>';
   }).join('');
-  document.getElementById('dayp').innerHTML=head+rows;
+  document.getElementById('dayBody').innerHTML=body;
+  document.getElementById('dayOv').classList.add('show');
 }
 
-function selectDay(di){selDate=di;renderCal();renderDay();}
+function selectDay(di){selDate=di;renderCal();openDay();}
 function shiftMonth(n){viewM+=n;if(viewM<0){viewM=11;viewY--;}if(viewM>11){viewM=0;viewY++;}renderCal();}
 function goToday(){var t=todayMid();viewY=t.getFullYear();viewM=t.getMonth();selDate=iso(t);render();}
 
