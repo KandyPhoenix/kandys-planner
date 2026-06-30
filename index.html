@@ -210,12 +210,12 @@
 var KEY='services_planner_v1';
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','Setup','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Wedding','Other'];
+var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','Setup','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
 // Colors grouped by EFFORT, not platform: quick posts share pink, long-form Blog pops purple
 var COL={Blog:'#a855f7',Social:'#ff1c8d',LinkedIn:'#ff1c8d',SEO:'#ffb020',Invoice:'#2dd4bf',Setup:'#f97316',Portal:'#eab308',Report:'#4a9fff',
-  Appointment:'#5eb0ff',Bill:'#ff6b6b',Birthday:'#f472b6',Health:'#34d399',Errand:'#a3a3ff',Personal:'#c084fc',Wedding:'#fb7185',Other:'#9a9aa6'};
+  Appointment:'#5eb0ff',Bill:'#ff6b6b',Birthday:'#f472b6',Health:'#34d399',Errand:'#a3a3ff',Personal:'#c084fc',Other:'#9a9aa6'};
 // Default time-needed (minutes) per type — used when a task has no explicit estimate
-var DEFAULT_MINS={Social:15,LinkedIn:15,Blog:120,Report:90,SEO:60,Portal:30,Invoice:10,Setup:60,Appointment:60,Bill:5,Health:60,Errand:30,Personal:30,Birthday:0,Wedding:0,Other:30};
+var DEFAULT_MINS={Social:15,LinkedIn:15,Blog:120,Report:90,SEO:60,Portal:30,Invoice:10,Setup:60,Appointment:60,Bill:5,Health:60,Errand:30,Personal:30,Birthday:0,Other:30};
 // Types whose $ amount is money going OUT (expense), not billable income
 var EXPENSE_TYPES=['Bill'];
 function isExpense(t){return EXPENSE_TYPES.indexOf(t)>=0;}
@@ -255,11 +255,14 @@ function cloudSave(){if(docRef)docRef.set({json:JSON.stringify(S),updated:Date.n
 function ensureShape(o){
   o.rules=o.rules||[];o.oneoffs=o.oneoffs||[];o.done=o.done||{};o.skip=o.skip||{};o.subs=o.subs||{};o.settings=o.settings||{};
   if(!o.seededLife){
-    [{id:'anniversary',client:'Personal',type:'Wedding',title:'💍 Wedding anniversary',freq:'yearly',month:3,dom:10,active:true,pri:true},
+    [{id:'anniversary',client:'Personal',type:'Personal',title:'💍 Wedding anniversary',freq:'yearly',month:3,dom:10,active:true,pri:true},
      {id:'birthday',client:'Personal',type:'Birthday',title:'🎂 My birthday',freq:'yearly',month:0,dom:27,active:true}
     ].forEach(function(s){if(!o.rules.some(function(x){return x.id===s.id;}))o.rules.push(s);});
     o.seededLife=true;
   }
+  // Wedding type retired → Personal (covers any already-synced data)
+  o.rules.forEach(function(r){if(r.type==='Wedding')r.type='Personal';});
+  o.oneoffs.forEach(function(x){if(x.type==='Wedding')x.type='Personal';});
   return o;
 }
 var S=ensureShape(load());
