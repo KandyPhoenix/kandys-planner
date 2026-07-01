@@ -538,7 +538,7 @@ function renderMonth(){
   var ie=incExp(fil(itemsIn(first,mEnd)));
   document.getElementById('rev').innerHTML=(ie.inc||ie.exp)?('💰 <b>'+money(ie.inc)+'</b> billable'+(ie.exp?(' &nbsp;·&nbsp; 💸 <b class="outv">'+money(ie.exp)+'</b> out'):'')+' this month'):'';
   var gridStart=addDays(first,-first.getDay());
-  var items=fil(itemsIn(gridStart,addDays(gridStart,41))).filter(function(i){return sf!=='All'||isMain(i.type);}),by={};
+  var items=fil(itemsIn(gridStart,addDays(gridStart,41))),by={};
   items.forEach(function(i){(by[i.date]=by[i.date]||[]).push(i);});
   var tIso=iso(todayMid()),html='';
   for(var k=0;k<42;k++){
@@ -563,7 +563,7 @@ function renderWeek(){
   document.getElementById('mtitle').textContent=ws.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' – '+we.toLocaleDateString('en-US',{month:'short',day:'numeric'});
   var ie=incExp(fil(itemsIn(ws,we)));
   document.getElementById('rev').innerHTML=(ie.inc||ie.exp)?('💰 <b>'+money(ie.inc)+'</b> billable'+(ie.exp?(' &nbsp;·&nbsp; 💸 <b class="outv">'+money(ie.exp)+'</b> out'):'')+' this week'):'';
-  var items=fil(itemsIn(ws,we)).filter(function(i){return sf!=='All'||isMain(i.type);}),by={};
+  var items=fil(itemsIn(ws,we)),by={};
   items.forEach(function(i){(by[i.date]=by[i.date]||[]).push(i);});
   var tIso=iso(todayMid()),html='';
   for(var k=0;k<7;k++){
@@ -581,8 +581,8 @@ function updateVtog(){var b=document.getElementById('vtog');if(b)b.textContent=v
 function onDrag(e,key){dragKey=key;try{e.dataTransfer.setData('text/plain',key);e.dataTransfer.effectAllowed='move';}catch(_){}}
 function onDrop(e,di){e.preventDefault();var key=dragKey||(e.dataTransfer&&e.dataTransfer.getData('text/plain'));if(key){moveKey(key,di);save();selDate=di;render();}dragKey=null;}
 function renderLegend(){
-  var used={};itemsIn(addDays(todayMid(),-90),addDays(todayMid(),200)).forEach(function(i){used[i.type]=1;});
-  var show=MAIN_TYPES.filter(function(t){return used[t];});
+  var used={};fil(itemsIn(addDays(todayMid(),-90),addDays(todayMid(),200))).forEach(function(i){used[i.type]=1;});
+  var show=TYPES.filter(function(t){return used[t];});
   if(!show.length){document.getElementById('legend').innerHTML='';return;}
   document.getElementById('legend').innerHTML=show.map(function(t){return '<span class="lg"><span class="ld" style="background:'+typeColor(t)+'"></span>'+esc(t)+'</span>';}).join('');
 }
