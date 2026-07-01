@@ -42,6 +42,9 @@
   .ring-t{fill:var(--text);font-size:17px;font-weight:800}
   .ring-l{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
   .winmsg{text-align:center;font-size:14px;font-weight:800;color:var(--pink);margin-top:18px;padding:13px;background:var(--panel2);border:1px solid var(--line);border-radius:12px}
+  .updbar{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:100;background:var(--pink);color:#fff;font-weight:800;
+    font-size:13px;padding:8px 10px 8px 16px;border-radius:24px;box-shadow:0 6px 22px rgba(0,0,0,.55);display:flex;align-items:center;gap:6px}
+  .updbar button{background:#fff;color:var(--pink);border:none;border-radius:16px;padding:6px 13px;font-weight:800;font-size:12px;cursor:pointer}
   .litxt{color:var(--pink);text-decoration:none;font-weight:600}
   .litxt.sdone{color:var(--muted);text-decoration:line-through}
   #listsTabs{overflow-x:auto}
@@ -356,6 +359,7 @@
 
 <script>
 var KEY='services_planner_v1';
+var BUILD='2026-07-01-1'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -469,6 +473,7 @@ function mergeData(d){
   if(/[?&#]reset/.test(src)){localStorage.removeItem(KEY);S=ensureShape({rules:[],oneoffs:[],done:{},skip:{}});}
   if(/seed=/.test(src))mergeData(decodeSeed(src));
   if(/reset|seed=/.test(src))history.replaceState(null,'',location.pathname);
+  else if(/[?&](v|u|_)=/.test(location.search))history.replaceState(null,'',location.pathname);
 }catch(e){}})();
 
 var viewY,viewM,selDate,cf='All',sf='All',vmode='month',dragKey=null;
@@ -1196,6 +1201,20 @@ function checkReminders(){
   });
 }
 function closeOv(id){document.getElementById(id).classList.remove('show');}
+
+// ---- Update banner: detect a newer deploy (bypasses the 10-min page cache) ----
+function checkUpdate(){
+  fetch('index.html?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(t){
+    var m=t.match(/var BUILD='([^']+)'/);
+    if(m&&m[1]&&m[1]!==BUILD)showUpdateBanner();
+  }).catch(function(){});
+}
+function showUpdateBanner(){
+  if(document.getElementById('updbar'))return;
+  var b=document.createElement('div');b.id='updbar';b.className='updbar';
+  b.innerHTML='✨ New version available &nbsp;<button onclick="location.replace(location.pathname+\'?v=\'+Date.now())">Refresh</button>';
+  document.body.appendChild(b);
+}
 [].forEach.call(document.querySelectorAll('.ov'),function(o){o.addEventListener('click',function(e){if(e.target===o)o.classList.remove('show');});});
 
 render();
@@ -1203,7 +1222,11 @@ render();
 // ---- Reminders: check on load + every minute ----
 setTimeout(checkReminders,1500);
 setInterval(checkReminders,60000);
-document.addEventListener('visibilitychange',function(){if(!document.hidden)checkReminders();});
+document.addEventListener('visibilitychange',function(){if(!document.hidden){checkReminders();checkUpdate();}});
+
+// ---- Update check: on load + every 2 min ----
+setTimeout(checkUpdate,6000);
+setInterval(checkUpdate,120000);
 
 // ---- Firebase cloud sync (Firestore, same project as Wellness Tracker) ----
 (function(){
