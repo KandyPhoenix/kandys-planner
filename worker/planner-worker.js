@@ -60,7 +60,7 @@ export default {
       const at = tk.access_token;
       const lists = ((await (await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', { headers: { Authorization: 'Bearer ' + at } })).json()).value) || [];
       const out = [];
-      for (const l of lists.slice(0, 12)) {
+      for (const l of lists.slice(0, 25)) {
         const tasks = ((await (await fetch('https://graph.microsoft.com/v1.0/me/todo/lists/' + l.id + "/tasks?$top=25&$filter=status ne 'completed'", { headers: { Authorization: 'Bearer ' + at } })).json()).value) || [];
         out.push({ id: l.id, name: l.displayName, tasks: tasks.map((t) => ({ id: t.id, title: t.title, due: (t.dueDateTime && t.dueDateTime.dateTime) || null })) });
       }
