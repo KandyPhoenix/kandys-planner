@@ -403,7 +403,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-5'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-02-6'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -1009,7 +1009,16 @@ function bListRow(l,it,i){
 }
 function bHabitRow(h){var on=!!S.habitlog[h.id+'|'+iso(todayMid())],st=habitStreak(h.id);return '<div class="brow"><div class="check sm '+(on?'on':'')+'" onclick="bHabit(\''+h.id+'\')">'+(on?'✓':'')+'</div><div class="btxt">'+(h.emoji?esc(h.emoji)+' ':'')+esc(h.name)+(st?' <span class="mut">🔥'+st+'</span>':'')+'</div></div>';}
 function bGoalRow(g){var idx=S.goals.indexOf(g),prog=g.target>0?' <span class="mut">'+g.progress+'/'+g.target+'</span>':'';return '<div class="brow"><div class="check sm '+(g.done?'on':'')+'" onclick="bGoalDone('+idx+')">'+(g.done?'✓':'')+'</div><div class="btxt '+(g.done?'done':'')+'">'+esc(g.text)+prog+'</div></div>';}
-function moneyMini(){var first=new Date(viewY,viewM,1),mEnd=new Date(viewY,viewM,lastDom(viewY,viewM)),m=fil(itemsIn(first,mEnd)),billed=0,paid=0;m.forEach(function(i){if(i.amount&&!isExpense(i.type)){billed+=i.amount;if(isPaid(i))paid+=i.amount;}});return '<div class="mmini"><div><b>'+money(billed)+'</b><span>billed</span></div><div><b class="g">'+money(paid)+'</b><span>paid</span></div><div><b class="a">'+money(billed-paid)+'</b><span>outstanding</span></div></div>';}
+function moneyMini(){
+  var first=new Date(viewY,viewM,1),mEnd=new Date(viewY,viewM,lastDom(viewY,viewM)),m=fil(itemsIn(first,mEnd)),billed=0,paid=0,items=[];
+  m.forEach(function(i){if(i.amount&&!isExpense(i.type)){billed+=i.amount;var pd=isPaid(i);if(pd)paid+=i.amount;items.push({i:i,pd:pd});}});
+  var head='<div class="mmini"><div><b>'+money(billed)+'</b><span>billed</span></div><div><b class="g">'+money(paid)+'</b><span>paid</span></div><div><b class="a">'+money(billed-paid)+'</b><span>outstanding</span></div></div>';
+  items.sort(function(a,b){return a.pd-b.pd||(a.i.date<b.i.date?-1:1);});
+  var list=items.length?('<div class="agh" style="margin-top:8px">This month · tap ✓ to mark paid</div>'+items.map(function(x){
+    return '<div class="brow"><div class="check sm '+(x.pd?'on':'')+'" onclick="togglePaid(\''+x.i.key+'\')" title="Toggle paid">'+(x.pd?'✓':'')+'</div><div class="btxt">'+esc(x.i.title)+' <span class="mut">'+money(x.i.amount)+'</span></div><span class="tg" style="background:'+(x.pd?'var(--green)':'var(--amber)')+';font-size:9px">'+(x.pd?'paid':'unpaid')+'</span></div>';
+  }).join('')):'';
+  return head+list;
+}
 function cdBody(){var t=todayMid();var rows=S.countdowns.map(function(c,idx){var days=Math.round((parse(c.date)-t)/86400000);
   var lbl=days>0?('in '+days+' day'+(days>1?'s':'')):(days===0?'Today! 🎉':(Math.abs(days)+' day'+(Math.abs(days)>1?'s':'')+' ago'));
   return '<div class="brow"><div class="btxt">'+(c.emoji?esc(c.emoji)+' ':'')+esc(c.label)+' <span class="mut">'+lbl+'</span></div><button class="mini xs" onclick="delCountdown('+idx+')">✕</button></div>';}).join('');
@@ -1040,9 +1049,9 @@ function boardWidgets(){
   var up=fil(itemsIn(addDays(t,1),addDays(t,7))).filter(function(i){return !i.done;}).sort(function(a,b){return a.date===b.date?cmpItem(a,b):(a.date<b.date?-1:1);});
   W.push({id:'next7',title:'🗓 Next 7 days',body:up.length?up.map(bUpRow).join(''):emptyW('Nothing coming up')});
   S.lists.forEach(function(l){W.push({id:'list:'+l.id,title:l.emoji+' '+esc(l.name),body:(l.items||[]).length?l.items.map(function(it,i){return bListRow(l,it,i);}).join(''):emptyW('Empty'),footer:'<div class="wadd"><input id="bl_'+l.id+'" placeholder="+ add" onkeydown="if(event.key===&quot;Enter&quot;)bListAdd(\''+l.id+'\')"></div>'});});
-  W.push({id:'habits',title:'🔥 Habits',body:S.habits.length?S.habits.map(bHabitRow).join(''):emptyW('No habits yet')});
+  W.push({id:'habits',title:'🔥 Habits',body:S.habits.length?S.habits.map(bHabitRow).join(''):emptyW('No habits yet'),footer:'<div class="wadd"><input placeholder="+ add habit" onkeydown="if(event.key===&quot;Enter&quot;)bHabitAdd(this)"></div>'});
   var mk=curMonthKey(),goals=S.goals.filter(function(g){return g.month===mk||g.month==='ongoing';});
-  W.push({id:'goals',title:'🎯 Goals',body:goals.length?goals.map(bGoalRow).join(''):emptyW('No goals')});
+  W.push({id:'goals',title:'🎯 Goals',body:goals.length?goals.map(bGoalRow).join(''):emptyW('No goals'),footer:'<div class="wadd"><input placeholder="+ add goal" onkeydown="if(event.key===&quot;Enter&quot;)bGoalAdd(this)"></div>'});
   W.push({id:'money',title:'💰 Money',body:moneyMini()});
   W.push({id:'top3',title:'⭐ Top 3 today',body:top3Body()});
   W.push({id:'countdown',title:'⏳ Countdowns',body:cdBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:7px;font-size:12px" onclick="addCountdown()">+ add countdown</button></div>'});
@@ -1090,6 +1099,8 @@ function bListToggle(lid,i){var l=S.lists.filter(function(x){return x.id===lid;}
 function bListDel(lid,i){var l=S.lists.filter(function(x){return x.id===lid;})[0];if(l){l.items.splice(i,1);save();renderBoard();}}
 function bHabit(id){var k=id+'|'+iso(todayMid()),on=!S.habitlog[k];if(on)S.habitlog[k]=true;else delete S.habitlog[k];save();renderBoard();if(on){var st=habitStreak(id);if(st>0&&st%7===0){toast('🔥 '+st+'-day streak!');celebrate();}}}
 function bGoalDone(idx){var g=S.goals[idx],was=g.done;g.done=!g.done;save();renderBoard();if(g.done&&!was){toast('🎯 '+g.text);celebrate();}}
+function bHabitAdd(inp){var v=inp.value.trim();if(!v)return;S.habits.push({id:'h'+Date.now(),emoji:'',name:v});inp.value='';save();renderBoard();}
+function bGoalAdd(inp){var v=inp.value.trim();if(!v)return;S.goals.push({id:'g'+Date.now(),text:v,month:curMonthKey(),target:0,progress:0,done:false});inp.value='';save();renderBoard();}
 window.addEventListener('resize',function(){if(boardMode)sizeBoard();});
 
 // ---- Money dashboard ----
