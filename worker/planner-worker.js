@@ -21,7 +21,7 @@ const CORS = {
 };
 
 // Only these hosts may be proxied (prevents this from being an open proxy)
-const ALLOW = ['news.google.com'];
+const ALLOW = ['news.google.com', 'finance.yahoo.com'];
 
 export default {
   async fetch(req) {
@@ -43,10 +43,8 @@ export default {
       }
       const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 PlannerWorker' } });
       const body = await r.text();
-      return new Response(body, {
-        status: r.status,
-        headers: { ...CORS, 'content-type': 'text/xml; charset=utf-8' },
-      });
+      const ct = r.headers.get('content-type') || 'text/plain; charset=utf-8';
+      return new Response(body, { status: r.status, headers: { ...CORS, 'content-type': ct } });
     }
 
     return new Response(

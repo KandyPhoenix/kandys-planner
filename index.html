@@ -92,6 +92,8 @@
   .wxdays{display:flex;justify-content:space-between;gap:4px;margin-top:10px}
   .wxday{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px}
   .newscat{flex:0 0 auto;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:var(--pink);border-radius:5px;padding:2px 5px;margin-top:2px}
+  .stk{flex:0 0 auto;font-size:12px;font-weight:700;white-space:nowrap}.stk small{font-size:10px}
+  .stk.up{color:var(--green)}.stk.dn{color:var(--red)}
   .filters{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px}
   .fbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:18px;
     padding:5px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
@@ -416,7 +418,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-14'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-02-15'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -495,6 +497,7 @@ function ensureShape(o){
   if(o.settings.sticky===undefined)o.settings.sticky='';
   if(o.settings.wxLat===undefined){o.settings.wxLat=30.16;o.settings.wxLon=-95.46;o.settings.wxName='The Woodlands';} // weather location
   o.settings.newsFeeds=o.settings.newsFeeds||['World','US','Houston','Business'];
+  o.settings.stocks=o.settings.stocks||[];
   if(!o.seededExtras){
     o.templates.push(
       {id:'onboard',name:'🚀 New client onboarding',space:'PM',tasks:[{title:'Kickoff call',type:'Appointment',off:0},{title:'Run audit',type:'SEO',off:1},{title:'Set up tools & access',type:'One-time',off:2},{title:'Build content plan',type:'Report',off:3},{title:'Create client portal',type:'Portal',off:4},{title:'Send welcome + first invoice',type:'Invoice',off:5}]},
@@ -1016,7 +1019,7 @@ function toggleBoard(){
   document.getElementById('mainwrap').style.display=boardMode?'none':'';
   document.getElementById('board').style.display=boardMode?'block':'none';
   var b=document.getElementById('boardBtn');if(b)b.textContent=boardMode?'📅 Calendar':'🧩 Board';
-  if(boardMode){renderBoard();if(!wxCache)fetchWx();if(!newsCache.length&&!newsLoading)fetchNews();}
+  if(boardMode){renderBoard();if(!wxCache)fetchWx();if(!newsCache.length&&!newsLoading)fetchNews();fetchStocks();}
 }
 function sizeBoard(){var h=document.querySelector('header').offsetHeight;document.getElementById('board').style.height=(window.innerHeight-h)+'px';}
 function widget(title,body,footer){return '<div class="widget"><div class="wtitle">'+title+'</div><div class="wbody">'+body+'</div>'+(footer||'')+'</div>';}
@@ -1107,6 +1110,35 @@ function newsBody(){
   if(!newsCache.length)return '<div class="wempty">'+(newsLoading?'Loading headlines…':'No headlines (feed relay may be busy — try again)')+'</div>';
   return newsCache.slice(0,14).map(function(n){return '<div class="brow"><span class="newscat">'+esc(n.cat)+'</span><a href="'+esc(n.url)+'" target="_blank" rel="noopener" class="btxt litxt">'+esc(n.title)+'</a></div>';}).join('');
 }
+// ---- Stock watchlist (live quotes via your Worker → Yahoo Finance) ----
+var stockCache={};
+function fetchStocks(){
+  var list=S.settings.stocks||[];if(!list.length||!S.settings.worker)return;
+  var w=S.settings.worker.replace(/\/+$/,'');
+  list.forEach(function(s){
+    var url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(s.sym)+'?range=1d&interval=1d';
+    fetch(w+'/proxy?url='+encodeURIComponent(url)).then(function(r){return r.json();}).then(function(d){
+      try{var m=d.chart.result[0].meta;stockCache[s.sym]={price:m.regularMarketPrice,prev:(m.chartPreviousClose||m.previousClose)};if(boardMode)renderBoard();}catch(e){}
+    }).catch(function(){});
+  });
+}
+function stockBody(){
+  var list=S.settings.stocks||[];
+  if(!S.settings.worker)return '<div class="wempty">Set your Cloudflare Worker in ⚙ Settings to enable live quotes.</div>';
+  if(!list.length)return '<div class="wempty">Add tickers below — e.g. <b>AAPL</b>, or <b>AAPL 100</b> to track 100 shares.</div>';
+  var total=0;
+  var rows=list.map(function(s,i){var q=stockCache[s.sym],price=q?q.price:null,chg=(q&&q.prev)?((q.price-q.prev)/q.prev*100):null,up=(chg==null||chg>=0);
+    if(q&&s.sh)total+=q.price*s.sh;
+    return '<div class="brow"><div class="btxt"><b>'+esc(s.sym)+'</b>'+(s.sh?' <span class="mut">'+s.sh+' sh</span>':'')+'</div>'+
+      '<span class="stk '+(up?'up':'dn')+'">'+(price!=null?'$'+price.toFixed(2):'…')+(chg!=null?' <small>'+(up?'▲':'▼')+Math.abs(chg).toFixed(2)+'%</small>':'')+'</span>'+
+      '<button class="mini xs" onclick="delStock('+i+')">✕</button></div>';
+  }).join('');
+  return (total?'<div class="agh" style="margin-top:2px">Holdings: '+money(Math.round(total))+'</div>':'')+rows;
+}
+function stockAdd(inp){var v=inp.value.trim();if(!v)return;var p=v.split(/\s+/),sym=p[0].toUpperCase(),sh=p[1]?+p[1]:0;
+  if(!S.settings.stocks)S.settings.stocks=[];if(!S.settings.stocks.some(function(x){return x.sym===sym;}))S.settings.stocks.push({sym:sym,sh:sh});
+  inp.value='';save();fetchStocks();renderBoard();}
+function delStock(i){S.settings.stocks.splice(i,1);save();renderBoard();}
 function top3Ensure(){var day=iso(todayMid());if(!S.top3[day])S.top3[day]=[{t:'',d:false},{t:'',d:false},{t:'',d:false}];return S.top3[day];}
 function top3Body(){var a=top3Ensure();return a.slice(0,3).map(function(it,i){return '<div class="brow"><div class="check sm '+(it.d?'on':'')+'" onclick="top3Toggle('+i+')">'+(it.d?'✓':'')+'</div><input class="btxt" style="background:transparent;border:none;padding:3px" value="'+esc(it.t)+'" placeholder="Priority '+(i+1)+'" onchange="top3Set('+i+',this.value)"></div>';}).join('');}
 function top3Set(i,v){top3Ensure()[i].t=v;save();}
@@ -1127,6 +1159,7 @@ function boardWidgets(){
   W.push({id:'minical',title:'🗓 Mini calendar',body:miniCalBody()});
   W.push({id:'weather',title:'☀️ Weather',body:wxBody()});
   W.push({id:'news',title:'📰 News',body:newsBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchNews();renderBoard()">↻ refresh</button></div>'});
+  W.push({id:'stocks',title:'📈 Watchlist',body:stockBody(),footer:'<div class="wadd"><input placeholder="+ AAPL   (or  AAPL 100)" onkeydown="if(event.key===&quot;Enter&quot;)stockAdd(this)"></div>'});
   W.push({id:'sticky',title:'📌 Sticky note',body:stickyBody()});
   return W;
 }
