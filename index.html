@@ -80,6 +80,13 @@
   .mmini>div{display:flex;flex-direction:column}
   .mmini b{font-size:24px}.mmini b.g{color:var(--green)}.mmini b.a{color:var(--amber)}
   .mmini span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+  .minical{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .mcdow{text-align:center;font-size:9px;font-weight:700;color:var(--muted)}
+  .mccell{position:relative;text-align:center;font-size:11px;padding:5px 0;border-radius:6px;cursor:pointer}
+  .mccell.out{opacity:.3}.mccell.today{background:var(--pink);color:#fff;font-weight:800}
+  .mccell.has:after{content:"";position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--pink)}
+  .mccell.today.has:after{background:#fff}
+  .stickyta{width:100%;height:100%;min-height:130px;border:none;background:transparent;resize:none;color:var(--text);font-size:14px;padding:0}
   .filters{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px}
   .fbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:18px;
     padding:5px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
@@ -276,6 +283,7 @@
   <label>Time (optional)</label><input id="tTime" type="time">
   <label style="display:flex;align-items:center;gap:9px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--text);margin-top:13px;cursor:pointer"><label class="sw" style="margin:0"><input type="checkbox" id="tPri"><span class="sl"></span></label> ⭐ Mark as priority</label>
   <div style="display:flex;gap:10px"><div style="flex:1"><label>Amount ($, optional)</label><input id="tAmt" type="number" min="0" placeholder="0"></div><div style="flex:1"><label>⏱ Time needed (min)</label><input id="tMins" type="number" min="0" step="5" placeholder="auto" list="minopts"><datalist id="minopts"><option value="15"><option value="30"><option value="45"><option value="60"><option value="90"><option value="120"><option value="180"></datalist></div></div>
+  <label>🔔 Remind me (days before, optional)</label><input id="tRemind" type="number" min="0" placeholder="0 = on the day">
   <label>Checklist / subtasks (optional)</label>
   <div id="tSubs"></div>
   <button class="ghost" style="position:static;width:100%;margin-top:6px;font-size:12px" onclick="addSubRow()">+ Add subtask</button>
@@ -354,6 +362,9 @@
     <button onclick="closeOv('menuOv');openWins()">🙌<span>Wins</span></button>
     <button onclick="closeOv('menuOv');openHabits()">🔥<span>Habits</span></button>
     <button onclick="closeOv('menuOv');openLists()">🗂<span>Lists</span></button>
+    <button onclick="closeOv('menuOv');openTemplates()">📋<span>Templates</span></button>
+    <button onclick="closeOv('menuOv');openWeek()">🗓<span>Plan Week</span></button>
+    <button onclick="closeOv('menuOv');openPomo()">🍅<span>Focus</span></button>
     <button onclick="closeOv('menuOv');openRules()">⚙<span>Recurring</span></button>
     <button onclick="closeOv('menuOv');openSummary()">📊<span>Summary</span></button>
     <button onclick="closeOv('menuOv');openSettings()">⚙<span>Settings</span></button>
@@ -369,6 +380,15 @@
   <div id="listsBody"></div>
 </div></div>
 
+<div class="ov" id="tplOv"><div class="sheet"><button class="xclose" onclick="closeOv('tplOv')">✕</button><h2>📋 Templates</h2>
+  <div class="hint" style="text-align:left;margin:0 0 6px">One tap spawns a bundle of tasks, spaced a day apart from today.</div>
+  <div id="tplBody"></div>
+</div></div>
+
+<div class="ov" id="weekOv"><div class="sheet"><button class="xclose" onclick="closeOv('weekOv')">✕</button><h2 id="weekTitle">🗓 Plan the Week</h2><div id="weekBody"></div></div></div>
+
+<div class="ov" id="pomoOv"><div class="sheet"><button class="xclose" onclick="closeOv('pomoOv')">✕</button><h2>🍅 Focus timer</h2><div id="pomoBody"></div></div></div>
+
 <div class="ov" id="goalsOv"><div class="sheet"><button class="xclose" onclick="closeOv('goalsOv')">✕</button><h2 id="goalsTitle">🎯 Goals</h2><div id="goalsBody"></div>
   <div style="display:flex;gap:6px;margin-top:12px"><input id="goalIn" placeholder="New goal…" onkeydown="if(event.key==='Enter')addGoal()"><input id="goalTgt" type="number" min="0" placeholder="target #" style="flex:0 0 90px"></div>
   <button class="save" onclick="addGoal()">+ Add goal</button>
@@ -383,7 +403,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-4'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-02-5'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -458,6 +478,17 @@ function ensureShape(o){
   if(o.settings.heatmap===undefined)o.settings.heatmap=true;
   o.settings.accent=o.settings.accent||'#ff1c8d';
   o.settings.board=o.settings.board||{};o.settings.board.pos=o.settings.board.pos||{};
+  o.notes=o.notes||{};o.countdowns=o.countdowns||[];o.templates=o.templates||[];o.top3=o.top3||{};
+  if(o.settings.sticky===undefined)o.settings.sticky='';
+  if(o.settings.wxLat===undefined){o.settings.wxLat=30.16;o.settings.wxLon=-95.46;o.settings.wxName='The Woodlands';} // weather location
+  if(!o.seededExtras){
+    o.templates.push(
+      {id:'onboard',name:'🚀 New client onboarding',space:'PM',tasks:[{title:'Kickoff call',type:'Appointment',off:0},{title:'Run audit',type:'SEO',off:1},{title:'Set up tools & access',type:'One-time',off:2},{title:'Build content plan',type:'Report',off:3},{title:'Create client portal',type:'Portal',off:4},{title:'Send welcome + first invoice',type:'Invoice',off:5}]},
+      {id:'monthclose',name:'📅 Monthly close',space:'PM',tasks:[{title:'Send invoices',type:'Invoice',off:0},{title:'Update client portals',type:'Portal',off:1},{title:'Pull GSC + analytics',type:'Report',off:2},{title:'Write monthly report',type:'Report',off:3}]}
+    );
+    o.countdowns.push({id:'anniv',emoji:'💍',label:'Anniversary',date:'2027-04-10'});
+    o.seededExtras=true;
+  }
   if(!o.seededLife){
     [{id:'anniversary',client:'Personal',type:'Personal',title:'💍 Wedding anniversary',freq:'yearly',month:3,dom:10,active:true,pri:true},
      {id:'birthday',client:'Personal',type:'Birthday',title:'🎂 My birthday',freq:'yearly',month:0,dom:27,active:true}
@@ -538,7 +569,7 @@ function instancesIn(start,end){
   return out.filter(function(i){return !(S.skip&&S.skip[i.key]);});
 }
 function instSubs(r,key){var tmpl=r.subs||[];var st=(S.subs&&S.subs[key])||[];return tmpl.map(function(s,i){return{t:(s&&s.t)||s||'',d:!!st[i]};}).filter(function(s){return s.t;});}
-function inst(r,d){var key=r.id+'|'+iso(d);return{key:key,space:r.space||'PM',client:r.client,type:r.type,title:r.title,date:iso(d),done:!!S.done[key],recurring:true,amount:r.amount||0,note:r.note||'',time:r.time||'',pri:!!r.pri,mins:(r.mins!=null?r.mins:''),subs:instSubs(r,key)};}
+function inst(r,d){var key=r.id+'|'+iso(d);return{key:key,space:r.space||'PM',client:r.client,type:r.type,title:r.title,date:iso(d),done:!!S.done[key],recurring:true,amount:r.amount||0,note:r.note||'',time:r.time||'',pri:!!r.pri,mins:(r.mins!=null?r.mins:''),remind:r.remind||0,subs:instSubs(r,key)};}
 function itemsIn(start,end){
   var items=instancesIn(start,end);
   S.oneoffs.forEach(function(o){
@@ -547,7 +578,7 @@ function itemsIn(start,end){
     for(var d=new Date(d0);d<=de&&d<=end;d=addDays(d,1)){
       var di=iso(d),isStart=(di===o.due);
       items.push({key:'one|'+o.id,id:o.id,space:o.space||'PM',client:o.client,type:o.type,title:o.title,date:di,done:!!o.done,recurring:false,
-        amount:isStart?(o.amount||0):0,note:o.note||'',time:o.time||'',pri:!!o.pri,mins:isStart?(o.mins!=null?o.mins:''):0,
+        amount:isStart?(o.amount||0):0,note:o.note||'',time:o.time||'',pri:!!o.pri,mins:isStart?(o.mins!=null?o.mins:''):0,remind:o.remind||0,
         subs:isStart?(o.subs||[]).filter(function(s){return s&&s.t;}):[],span:span,cont:!isStart,end:o.end||''});
     }
   });
@@ -724,6 +755,7 @@ function openDay(){
   document.getElementById('dayTitle').innerHTML=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+(openMins?' <span class="hdr-dur">· ~'+fmtDur(openMins)+' of work</span>':'');
   var body=list.length?list.map(function(i){return rowHTML(i,true);}).join(''):'<div style="color:var(--muted);padding:10px 0">Nothing due this day yet.</div>';
   body+='<button class="save" onclick="openTask()">+ Add to this day</button>';
+  body+='<label style="margin-top:16px">📝 Note for this day</label><textarea id="dayNote" placeholder="Log, thoughts, gratitude…" onchange="S.notes[selDate]=this.value;save();refreshOpen()">'+esc((S.notes&&S.notes[selDate])||'')+'</textarea>';
   document.getElementById('dayBody').innerHTML=body;
   document.getElementById('dayOv').classList.add('show');
 }
@@ -791,6 +823,7 @@ function openTask(id){
   var tmEl=document.getElementById('tMins');tmEl.placeholder='auto ('+(fmtDur(DEFAULT_MINS[o?o.type:document.getElementById('tType').value]||0)||'—')+')';
   document.getElementById('tType').onchange=function(){tmEl.placeholder='auto ('+(fmtDur(DEFAULT_MINS[this.value]||0)||'—')+')';};
   document.getElementById('tAmt').value=o&&o.amount?o.amount:'';
+  document.getElementById('tRemind').value=(o&&o.remind)?o.remind:'';
   document.getElementById('tNote').value=o&&o.note?o.note:'';
   editSubs=(o&&o.subs?o.subs:[]).map(function(s){return{t:s.t||'',d:!!s.d};});
   renderSubEditor();
@@ -803,7 +836,7 @@ function saveTask(){
   var du=document.getElementById('tDue').value,en=document.getElementById('tEnd').value;
   var data={title:t,space:document.getElementById('tSpace').value,client:document.getElementById('tClient').value.trim()||'Lori',type:document.getElementById('tType').value,
     due:du,end:(en&&en>du)?en:'',time:document.getElementById('tTime').value||'',pri:document.getElementById('tPri').checked,
-    mins:(mv===''?'':+mv),amount:+document.getElementById('tAmt').value||0,note:document.getElementById('tNote').value.trim(),subs:subs};
+    mins:(mv===''?'':+mv),amount:+document.getElementById('tAmt').value||0,remind:+document.getElementById('tRemind').value||0,note:document.getElementById('tNote').value.trim(),subs:subs};
   if(editId)Object.assign(S.oneoffs.filter(function(x){return x.id==editId;})[0],data);
   else{data.id='o'+Date.now();data.done=false;S.oneoffs.push(data);}
   save();closeOv('taskOv');selDate=data.due;render();
@@ -834,6 +867,7 @@ function renderRules(){
         '<div><label>Time</label><input type="time" value="'+(r.time||'')+'" onchange="setRule('+idx+',\'time\',this.value)"></div>'+
         '<div><label>Mins</label><input type="number" min="0" step="5" value="'+(r.mins!=null?r.mins:'')+'" placeholder="auto" onchange="setRule('+idx+',\'mins\',this.value)"></div>'+
         '<div><label>Amount $</label><input type="number" min="0" value="'+(r.amount||'')+'" placeholder="0" onchange="setRule('+idx+',\'amount\',this.value)"></div>'+
+        '<div><label>Remind (d before)</label><input type="number" min="0" value="'+(r.remind||'')+'" placeholder="0" onchange="setRule('+idx+',\'remind\',this.value)"></div>'+
         '<div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;padding-top:18px"><label class="sw" style="margin:0"><input type="checkbox" '+(r.pri?'checked':'')+' onchange="setRule('+idx+',\'pri\',this.checked)"><span class="sl"></span></label><span style="font-size:11px;color:var(--muted)">⭐ Priority</span></div>'+
       '</div>'+
       '<textarea style="margin-top:8px" placeholder="Checklist — one subtask per line (optional)" onchange="setRule('+idx+',\'subs\',this.value)">'+esc(subsTxt)+'</textarea>'+
@@ -846,7 +880,7 @@ function delRule(idx){if(confirm('Delete this recurring deliverable?')){S.rules.
 function setRule(idx,k,v){
   if(k==='active'||k==='pri')S.rules[idx][k]=v;
   else if(k==='mins')S.rules[idx].mins=(v===''?null:+v);
-  else if(k==='dow'||k==='dom'||k==='amount'||k==='month')S.rules[idx][k]=+v;
+  else if(k==='dow'||k==='dom'||k==='amount'||k==='month'||k==='remind')S.rules[idx][k]=+v;
   else if(k==='subs')S.rules[idx].subs=(''+v).split('\n').map(function(s){return s.trim();}).filter(Boolean).map(function(s){return{t:s};});
   else S.rules[idx][k]=v;
   if(k==='freq'&&(v==='monthly'||v==='quarterly')&&!S.rules[idx].dom)S.rules[idx].dom=1;
@@ -960,7 +994,7 @@ function toggleBoard(){
   document.getElementById('mainwrap').style.display=boardMode?'none':'';
   document.getElementById('board').style.display=boardMode?'block':'none';
   var b=document.getElementById('boardBtn');if(b)b.textContent=boardMode?'📅 Calendar':'🧩 Board';
-  if(boardMode)renderBoard();
+  if(boardMode){renderBoard();if(!wxCache)fetchWx();}
 }
 function sizeBoard(){var h=document.querySelector('header').offsetHeight;document.getElementById('board').style.height=(window.innerHeight-h)+'px';}
 function widget(title,body,footer){return '<div class="widget"><div class="wtitle">'+title+'</div><div class="wbody">'+body+'</div>'+(footer||'')+'</div>';}
@@ -976,6 +1010,29 @@ function bListRow(l,it,i){
 function bHabitRow(h){var on=!!S.habitlog[h.id+'|'+iso(todayMid())],st=habitStreak(h.id);return '<div class="brow"><div class="check sm '+(on?'on':'')+'" onclick="bHabit(\''+h.id+'\')">'+(on?'✓':'')+'</div><div class="btxt">'+(h.emoji?esc(h.emoji)+' ':'')+esc(h.name)+(st?' <span class="mut">🔥'+st+'</span>':'')+'</div></div>';}
 function bGoalRow(g){var idx=S.goals.indexOf(g),prog=g.target>0?' <span class="mut">'+g.progress+'/'+g.target+'</span>':'';return '<div class="brow"><div class="check sm '+(g.done?'on':'')+'" onclick="bGoalDone('+idx+')">'+(g.done?'✓':'')+'</div><div class="btxt '+(g.done?'done':'')+'">'+esc(g.text)+prog+'</div></div>';}
 function moneyMini(){var first=new Date(viewY,viewM,1),mEnd=new Date(viewY,viewM,lastDom(viewY,viewM)),m=fil(itemsIn(first,mEnd)),billed=0,paid=0;m.forEach(function(i){if(i.amount&&!isExpense(i.type)){billed+=i.amount;if(isPaid(i))paid+=i.amount;}});return '<div class="mmini"><div><b>'+money(billed)+'</b><span>billed</span></div><div><b class="g">'+money(paid)+'</b><span>paid</span></div><div><b class="a">'+money(billed-paid)+'</b><span>outstanding</span></div></div>';}
+function cdBody(){var t=todayMid();var rows=S.countdowns.map(function(c,idx){var days=Math.round((parse(c.date)-t)/86400000);
+  var lbl=days>0?('in '+days+' day'+(days>1?'s':'')):(days===0?'Today! 🎉':(Math.abs(days)+' day'+(Math.abs(days)>1?'s':'')+' ago'));
+  return '<div class="brow"><div class="btxt">'+(c.emoji?esc(c.emoji)+' ':'')+esc(c.label)+' <span class="mut">'+lbl+'</span></div><button class="mini xs" onclick="delCountdown('+idx+')">✕</button></div>';}).join('');
+  return rows||emptyW('No countdowns');}
+function addCountdown(){var l=prompt('Countdown to what?');if(!l||!l.trim())return;var d=prompt('Date (YYYY-MM-DD):');if(!d||!/^\d{4}-\d\d-\d\d$/.test(d.trim())){alert('Please use YYYY-MM-DD');return;}S.countdowns.push({id:'cd'+Date.now(),emoji:'⏳',label:l.trim(),date:d.trim()});save();if(boardMode)renderBoard();}
+function delCountdown(idx){S.countdowns.splice(idx,1);save();if(boardMode)renderBoard();}
+function miniCalBody(){var t=todayMid(),first=new Date(viewY,viewM,1),gs=addDays(first,-first.getDay()),tIso=iso(t),byd={};
+  fil(itemsIn(gs,addDays(gs,41))).forEach(function(i){byd[i.date]=1;});
+  var h='<div style="text-align:center;font-weight:800;font-size:13px;margin-bottom:6px">'+first.toLocaleDateString('en-US',{month:'long',year:'numeric'})+'</div><div class="minical">';
+  ['S','M','T','W','T','F','S'].forEach(function(w){h+='<span class="mcdow">'+w+'</span>';});
+  for(var k=0;k<42;k++){var d=addDays(gs,k),di=iso(d);h+='<span class="mccell'+(d.getMonth()!==viewM?' out':'')+(di===tIso?' today':'')+(byd[di]?' has':'')+'" onclick="jumpTo(\''+di+'\');if(boardMode)toggleBoard()">'+d.getDate()+'</span>';}
+  return h+'</div>';}
+var wxCache=null;
+function fetchWx(){var s=S.settings;if(!s||s.wxLat==null)return;
+  fetch('https://api.open-meteo.com/v1/forecast?latitude='+s.wxLat+'&longitude='+s.wxLon+'&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
+    .then(function(r){return r.json();}).then(function(d){if(d&&d.current){wxCache={temp:Math.round(d.current.temperature_2m),code:d.current.weather_code};if(boardMode)renderBoard();}}).catch(function(){});}
+function wxIcon(c){if(c==null)return '🌡';if(c===0)return '☀️';if(c<=3)return '🌤';if(c<50)return '☁️';if(c<67)return '🌧';if(c<77)return '🌨';if(c<83)return '🌦';return '⛈';}
+function wxBody(){if(!wxCache)return '<div class="wempty">Loading weather…</div>';return '<div style="text-align:center;padding:12px 0"><div style="font-size:44px">'+wxIcon(wxCache.code)+'</div><div style="font-size:34px;font-weight:800">'+wxCache.temp+'°F</div><div class="mut">'+esc(S.settings.wxName||'')+'</div></div>';}
+function stickyBody(){return '<textarea class="stickyta" placeholder="Sticky note…" onchange="S.settings.sticky=this.value;save()">'+esc(S.settings.sticky||'')+'</textarea>';}
+function top3Ensure(){var day=iso(todayMid());if(!S.top3[day])S.top3[day]=[{t:'',d:false},{t:'',d:false},{t:'',d:false}];return S.top3[day];}
+function top3Body(){var a=top3Ensure();return a.slice(0,3).map(function(it,i){return '<div class="brow"><div class="check sm '+(it.d?'on':'')+'" onclick="top3Toggle('+i+')">'+(it.d?'✓':'')+'</div><input class="btxt" style="background:transparent;border:none;padding:3px" value="'+esc(it.t)+'" placeholder="Priority '+(i+1)+'" onchange="top3Set('+i+',this.value)"></div>';}).join('');}
+function top3Set(i,v){top3Ensure()[i].t=v;save();}
+function top3Toggle(i){var a=top3Ensure();a[i].d=!a[i].d;save();if(boardMode)renderBoard();}
 function boardWidgets(){
   var t=todayMid(),W=[];
   var today=fil(itemsIn(t,t)).sort(cmpItem);
@@ -987,6 +1044,11 @@ function boardWidgets(){
   var mk=curMonthKey(),goals=S.goals.filter(function(g){return g.month===mk||g.month==='ongoing';});
   W.push({id:'goals',title:'🎯 Goals',body:goals.length?goals.map(bGoalRow).join(''):emptyW('No goals')});
   W.push({id:'money',title:'💰 Money',body:moneyMini()});
+  W.push({id:'top3',title:'⭐ Top 3 today',body:top3Body()});
+  W.push({id:'countdown',title:'⏳ Countdowns',body:cdBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:7px;font-size:12px" onclick="addCountdown()">+ add countdown</button></div>'});
+  W.push({id:'minical',title:'🗓 Mini calendar',body:miniCalBody()});
+  W.push({id:'weather',title:'☀️ Weather',body:wxBody()});
+  W.push({id:'sticky',title:'📌 Sticky note',body:stickyBody()});
   return W;
 }
 function renderBoard(){
@@ -1129,6 +1191,63 @@ function delListItem(i){var l=curList();if(l){l.items.splice(i,1);save();renderL
 function addList(){var n=prompt('New list name?');if(!n||!n.trim())return;var id='L'+Date.now();S.lists.push({id:id,emoji:'📄',name:n.trim(),type:'checklist',items:[]});activeList=id;save();renderLists();}
 function delList(){var l=curList();if(l&&confirm('Delete list "'+l.name+'"?')){S.lists=S.lists.filter(function(x){return x.id!==activeList;});activeList=S.lists[0]&&S.lists[0].id;save();renderLists();}}
 
+// ---- Templates ----
+function openTemplates(){renderTemplates();document.getElementById('tplOv').classList.add('show');}
+function renderTemplates(){
+  document.getElementById('tplBody').innerHTML=S.templates.map(function(tp,idx){
+    return '<div class="rule"><div class="rh"><b style="flex:1;font-size:14px">'+esc(tp.name)+'</b><span class="tg" style="background:var(--pink)">'+esc(tp.space||'PM')+'</span><button class="mini" onclick="delTemplate('+idx+')">🗑️</button></div>'+
+      '<div class="hint" style="text-align:left;margin:6px 0">'+tp.tasks.map(function(t){return esc(t.title);}).join(' · ')+'</div>'+
+      '<button class="ghost" style="position:static;width:100%" onclick="useTemplate('+idx+')">➕ Add these '+tp.tasks.length+' tasks (from today)</button></div>';
+  }).join('')+'<button class="ghost" style="position:static;width:100%;margin-top:8px" onclick="newTemplate()">+ New template</button>';
+}
+function useTemplate(idx){var tp=S.templates[idx];if(!tp)return;
+  var proj=tp.space==='PM'?((sf==='PM'&&cf!=='All')?cf:'Lori'):(tp.space==='Life'?'Personal':'PHW');
+  if(!confirm('Add '+tp.tasks.length+' tasks from "'+tp.name+'" starting today?'))return;
+  var base=todayMid();
+  tp.tasks.forEach(function(t){S.oneoffs.push({id:uid(),title:t.title,space:tp.space||'PM',client:proj,type:t.type||'Other',due:iso(addDays(base,t.off||0)),done:false});});
+  save();closeOv('tplOv');render();alert('Added — check your calendar!');}
+function delTemplate(idx){if(confirm('Delete this template?')){S.templates.splice(idx,1);save();renderTemplates();}}
+function newTemplate(){var name=prompt('Template name?');if(!name||!name.trim())return;
+  var lines=prompt('Task titles — one per line (they space a day apart):');if(!lines)return;
+  var tasks=lines.split('\n').map(function(s,i){return{title:s.trim(),type:'Other',off:i};}).filter(function(t){return t.title;});
+  if(!tasks.length)return;
+  S.templates.push({id:'tpl'+Date.now(),name:name.trim(),space:(sf!=='All'?sf:'PM'),tasks:tasks});save();renderTemplates();}
+
+// ---- Plan the week ----
+var weekOffset=0;
+function openWeek(){weekOffset=0;renderWeekPlan();document.getElementById('weekOv').classList.add('show');}
+function weekAdd(di,inp){var v=inp.value.trim();if(!v)return;var sp=sf!=='All'?sf:'Life';S.oneoffs.push({id:'o'+Date.now(),title:v,space:sp,client:(cf!=='All'?cf:(sp==='Life'?'Personal':sp)),type:sp==='Life'?'Personal':'Other',due:di,done:false});inp.value='';save();renderWeekPlan();render();}
+function renderWeekPlan(){
+  var t=todayMid(),base=addDays(t,weekOffset*7),ws=addDays(base,-base.getDay()),tIso=iso(t);
+  document.getElementById('weekTitle').innerHTML='🗓 '+ws.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'–'+addDays(ws,6).toLocaleDateString('en-US',{month:'short',day:'numeric'})+
+    ' <button class="rollbtn" style="background:var(--panel2);color:var(--text)" onclick="weekOffset--;renderWeekPlan()">‹</button> <button class="rollbtn" style="background:var(--panel2);color:var(--text)" onclick="weekOffset=0;renderWeekPlan()">Now</button> <button class="rollbtn" style="background:var(--panel2);color:var(--text)" onclick="weekOffset++;renderWeekPlan()">›</button>';
+  var body='';
+  for(var k=0;k<7;k++){var d=addDays(ws,k),di=iso(d),list=fil(itemsIn(d,d)).sort(cmpItem),mins=sumDur(list.filter(function(i){return !i.done;}));
+    body+='<div class="agh'+(di===tIso?' a':'')+'">'+d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+(mins?' <span class="hdr-dur">~'+fmtDur(mins)+'</span>':'')+'</div>';
+    body+=list.map(function(i){return rowHTML(i,false);}).join('');
+    body+='<div style="padding:4px 0"><input placeholder="+ add" onkeydown="if(event.key===&quot;Enter&quot;)weekAdd(&quot;'+di+'&quot;,this)" style="font-size:13px;padding:8px 10px"></div>';
+  }
+  document.getElementById('weekBody').innerHTML=body;
+}
+
+// ---- Pomodoro focus timer ----
+var pomo={sec:25*60,run:false,timer:null,done:0,len:25};
+function fmtClock(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function openPomo(){renderPomo();document.getElementById('pomoOv').classList.add('show');}
+function renderPomo(){
+  document.getElementById('pomoBody').innerHTML=
+    '<div style="text-align:center;padding:8px 0"><div style="font-size:60px;font-weight:800">'+fmtClock(pomo.sec)+'</div>'+
+    '<div style="color:var(--muted);font-size:12px;margin-top:2px">'+pomo.done+' focus session'+(pomo.done===1?'':'s')+' today</div></div>'+
+    '<div style="display:flex;gap:8px;justify-content:center;margin:8px 0">'+[15,25,50].map(function(m){return '<button class="fbtn '+(pomo.len===m?'on':'')+'" onclick="pomoSet('+m+')">'+m+'m</button>';}).join('')+'</div>'+
+    '<div style="display:flex;gap:8px"><button class="save" style="flex:1;margin-top:0" onclick="pomoToggle()">'+(pomo.run?'⏸ Pause':'▶ Start')+'</button><button class="ghost" style="position:static;flex:0 0 92px" onclick="pomoReset()">↺ Reset</button></div>';
+}
+function pomoSet(m){pomo.len=m;pomo.sec=m*60;pomo.run=false;if(pomo.timer){clearInterval(pomo.timer);pomo.timer=null;}renderPomo();}
+function pomoToggle(){if(pomo.run){pomo.run=false;clearInterval(pomo.timer);pomo.timer=null;}else{pomo.run=true;pomo.timer=setInterval(pomoTick,1000);}renderPomo();}
+function pomoReset(){pomo.run=false;if(pomo.timer){clearInterval(pomo.timer);pomo.timer=null;}pomo.sec=pomo.len*60;renderPomo();}
+function pomoTick(){pomo.sec--;if(pomo.sec<=0){clearInterval(pomo.timer);pomo.timer=null;pomo.run=false;pomo.done++;pomo.sec=pomo.len*60;pomoChime();toast('🍅 Focus session done! Nice work.');notify('🍅 Focus done','Take a short break.');}
+  if(document.getElementById('pomoOv').classList.contains('show'))renderPomo();}
+function pomoChime(){try{var ac=new (window.AudioContext||window.webkitAudioContext)(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.value=880;g.gain.value=.12;o.start();setTimeout(function(){o.frequency.value=1320;},160);setTimeout(function(){o.stop();ac.close();},420);}catch(e){}}
+
 // ---- Insights ----
 function openInsights(){renderInsights(30);document.getElementById('insightsOv').classList.add('show');}
 function barList(map){var keys=Object.keys(map);if(!keys.length)return '<div class="hint" style="text-align:left">No data.</div>';var max=1;keys.forEach(function(k){if(map[k].m>max)max=map[k].m;});
@@ -1256,6 +1375,11 @@ function checkReminders(){
   // Timed items today: fire when the clock reaches their time
   items.filter(function(i){return i.date===today&&i.time;}).forEach(function(i){
     if(i.time<=hm&&!notifiedKeys[i.key+'|'+today]){notifiedKeys[i.key+'|'+today]=true;notify('⏰ '+fmtTime(i.time)+' — '+i.title,(i.client||'')+(i.type?' · '+i.type:''));}
+  });
+  // Lead-time reminders: notify N days before due
+  itemsIn(addDays(t,1),addDays(t,60)).filter(function(i){return !i.done&&i.remind>0;}).forEach(function(i){
+    var days=Math.round((parse(i.date)-t)/86400000);
+    if(days>0&&days<=i.remind){var k='lead|'+i.key+'|'+today;if(!notifiedKeys[k]){notifiedKeys[k]=true;notify('📅 In '+days+' day'+(days>1?'s':'')+': '+i.title,(i.client||'')+' · due '+i.date);}}
   });
 }
 function closeOv(id){document.getElementById(id).classList.remove('show');}
