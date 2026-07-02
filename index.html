@@ -91,6 +91,7 @@
   .wxstats span{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px 8px}
   .wxdays{display:flex;justify-content:space-between;gap:4px;margin-top:10px}
   .wxday{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px}
+  .newscat{flex:0 0 auto;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:var(--pink);border-radius:5px;padding:2px 5px;margin-top:2px}
   .filters{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px}
   .fbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:18px;
     padding:5px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
@@ -409,7 +410,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-12'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-02-13'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -487,6 +488,7 @@ function ensureShape(o){
   o.notes=o.notes||{};o.countdowns=o.countdowns||[];o.templates=o.templates||[];o.top3=o.top3||{};
   if(o.settings.sticky===undefined)o.settings.sticky='';
   if(o.settings.wxLat===undefined){o.settings.wxLat=30.16;o.settings.wxLon=-95.46;o.settings.wxName='The Woodlands';} // weather location
+  o.settings.newsFeeds=o.settings.newsFeeds||['World','US','Houston','Business'];
   if(!o.seededExtras){
     o.templates.push(
       {id:'onboard',name:'🚀 New client onboarding',space:'PM',tasks:[{title:'Kickoff call',type:'Appointment',off:0},{title:'Run audit',type:'SEO',off:1},{title:'Set up tools & access',type:'One-time',off:2},{title:'Build content plan',type:'Report',off:3},{title:'Create client portal',type:'Portal',off:4},{title:'Send welcome + first invoice',type:'Invoice',off:5}]},
@@ -1008,7 +1010,7 @@ function toggleBoard(){
   document.getElementById('mainwrap').style.display=boardMode?'none':'';
   document.getElementById('board').style.display=boardMode?'block':'none';
   var b=document.getElementById('boardBtn');if(b)b.textContent=boardMode?'📅 Calendar':'🧩 Board';
-  if(boardMode){renderBoard();if(!wxCache)fetchWx();}
+  if(boardMode){renderBoard();if(!wxCache)fetchWx();if(!newsCache.length&&!newsLoading)fetchNews();}
 }
 function sizeBoard(){var h=document.querySelector('header').offsetHeight;document.getElementById('board').style.height=(window.innerHeight-h)+'px';}
 function widget(title,body,footer){return '<div class="widget"><div class="wtitle">'+title+'</div><div class="wbody">'+body+'</div>'+(footer||'')+'</div>';}
@@ -1064,6 +1066,41 @@ function wxBody(){
     '<div class="wxdays">'+days+'</div></div>';
 }
 function stickyBody(){return '<textarea class="stickyta" placeholder="Sticky note…" onchange="S.settings.sticky=this.value;save()">'+esc(S.settings.sticky||'')+'</textarea>';}
+// ---- News ticker (Google News RSS via a free CORS relay) ----
+var newsCache=[],newsLoading=false;
+var NEWS_FEEDS={
+  World:'https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en',
+  US:'https://news.google.com/rss/headlines/section/topic/NATION?hl=en-US&gl=US&ceid=US:en',
+  Houston:'https://news.google.com/rss/search?q=Houston%20OR%20%22The%20Woodlands%22%20when:2d&hl=en-US&gl=US&ceid=US:en',
+  Business:'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en'
+};
+var NEWS_PROXIES=[
+  function(u){return (S.settings.worker?S.settings.worker.replace(/\/$/,'')+'/proxy?url=':'')+encodeURIComponent(u);}, // your Worker (reliable) if set
+  function(u){return 'https://corsproxy.io/?url='+encodeURIComponent(u);},
+  function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u);},
+  function(u){return 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u);}
+];
+function proxyFetch(u,idx){idx=idx||0;if(!S.settings.worker&&idx===0)idx=1;
+  if(idx>=NEWS_PROXIES.length)return Promise.reject('relays down');
+  return fetch(NEWS_PROXIES[idx](u)).then(function(r){if(!r.ok)throw 0;return r.text();})
+    .then(function(t){if(!t||t.indexOf('<item')<0)throw 0;return t;})
+    .catch(function(){return proxyFetch(u,idx+1);});
+}
+function fetchNews(){
+  var sel=(S.settings.newsFeeds&&S.settings.newsFeeds.length)?S.settings.newsFeeds:['World','US','Houston','Business'];
+  var pending=sel.length,all=[];if(!pending){return;}newsLoading=true;
+  sel.forEach(function(k){var url=NEWS_FEEDS[k];if(!url){if(--pending<=0)doneNews(all);return;}
+    proxyFetch(url).then(function(t){
+      try{var doc=new DOMParser().parseFromString(t,'text/xml');[].forEach.call(doc.querySelectorAll('item'),function(it,i){if(i<6){var ti=it.querySelector('title'),ln=it.querySelector('link'),pd=it.querySelector('pubDate');all.push({cat:k,title:ti?ti.textContent:'',url:ln?ln.textContent:'',t:pd?Date.parse(pd.textContent):0});}});}catch(e){}
+      if(--pending<=0)doneNews(all);
+    }).catch(function(){if(--pending<=0)doneNews(all);});
+  });
+}
+function doneNews(all){newsLoading=false;newsCache=all.sort(function(a,b){return (b.t||0)-(a.t||0);});if(boardMode)renderBoard();}
+function newsBody(){
+  if(!newsCache.length)return '<div class="wempty">'+(newsLoading?'Loading headlines…':'No headlines (feed relay may be busy — try again)')+'</div>';
+  return newsCache.slice(0,14).map(function(n){return '<div class="brow"><span class="newscat">'+esc(n.cat)+'</span><a href="'+esc(n.url)+'" target="_blank" rel="noopener" class="btxt litxt">'+esc(n.title)+'</a></div>';}).join('');
+}
 function top3Ensure(){var day=iso(todayMid());if(!S.top3[day])S.top3[day]=[{t:'',d:false},{t:'',d:false},{t:'',d:false}];return S.top3[day];}
 function top3Body(){var a=top3Ensure();return a.slice(0,3).map(function(it,i){return '<div class="brow"><div class="check sm '+(it.d?'on':'')+'" onclick="top3Toggle('+i+')">'+(it.d?'✓':'')+'</div><input class="btxt" style="background:transparent;border:none;padding:3px" value="'+esc(it.t)+'" placeholder="Priority '+(i+1)+'" onchange="top3Set('+i+',this.value)"></div>';}).join('');}
 function top3Set(i,v){top3Ensure()[i].t=v;save();}
@@ -1083,6 +1120,7 @@ function boardWidgets(){
   W.push({id:'countdown',title:'⏳ Countdowns',body:cdBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:7px;font-size:12px" onclick="addCountdown()">+ add countdown</button></div>'});
   W.push({id:'minical',title:'🗓 Mini calendar',body:miniCalBody()});
   W.push({id:'weather',title:'☀️ Weather',body:wxBody()});
+  W.push({id:'news',title:'📰 News',body:newsBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchNews();renderBoard()">↻ refresh</button></div>'});
   W.push({id:'sticky',title:'📌 Sticky note',body:stickyBody()});
   return W;
 }
