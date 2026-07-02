@@ -1,3 +1,10 @@
 name = "planner"
 main = "planner-worker.js"
 compatibility_date = "2024-11-01"
+
+[vars]
+MS_CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
+
+[[kv_namespaces]]
+binding = "PLANNER_KV"
+id = "706d09105d8148cc802b9ce349ca7460"

@@ -343,6 +343,14 @@
   <button class="ghost" style="position:static;width:100%;margin-top:8px" onclick="saveWorker()">Save Worker URL</button>
   <div class="hint" style="text-align:left;margin:6px 0 0" id="workerStatus"></div>
 
+  <label style="margin-top:18px">📋 Microsoft To Do</label>
+  <div class="hint" style="text-align:left;margin:0 0 6px">Sign in to Microsoft to show your To Do lists as a board card + a 📋 calendar filter. Your login token is kept <b>only on this device</b> (never synced, never stored in the Worker). Needs the Worker URL above.</div>
+  <div style="display:flex;gap:8px">
+    <button class="ghost" style="position:static;flex:1" onclick="msConnect()">Connect Microsoft To Do</button>
+    <button class="ghost" style="position:static;flex:0 0 110px" onclick="msDisconnect()">Disconnect</button>
+  </div>
+  <div class="hint" style="text-align:left;margin:6px 0 0" id="msStatus"></div>
+
   <label style="margin-top:18px">📆 Calendar export</label>
   <div class="hint" style="text-align:left;margin:0 0 6px">Download an .ics file of the next ~7 months — import it into Google Calendar, Apple Calendar, or Outlook to see your planner items there.</div>
   <button class="ghost" style="position:static;width:100%" onclick="exportICS()">⤓ Export to calendar (.ics)</button>
@@ -418,13 +426,13 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-15'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-02-16'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
 // Colors grouped by EFFORT, not platform: quick posts share pink, long-form Blog pops purple
 var COL={Blog:'#a855f7',Social:'#ff1c8d',LinkedIn:'#ff1c8d',SEO:'#ffb020',Invoice:'#2dd4bf','One-time':'#f97316',Portal:'#eab308',Report:'#4a9fff',
-  Appointment:'#5eb0ff',Bill:'#ff6b6b',Birthday:'#f472b6',Health:'#34d399',Errand:'#a3a3ff',Personal:'#c084fc',Todoist:'#e44332',Other:'#9a9aa6'};
+  Appointment:'#5eb0ff',Bill:'#ff6b6b',Birthday:'#f472b6',Health:'#34d399',Errand:'#a3a3ff',Personal:'#c084fc',Todoist:'#e44332',MsTodo:'#2564cf',Other:'#9a9aa6'};
 // Default time-needed (minutes) per type — used when a task has no explicit estimate
 var DEFAULT_MINS={Social:15,LinkedIn:15,Blog:120,Report:90,SEO:60,Portal:30,Invoice:10,'One-time':60,Appointment:60,Bill:5,Health:60,Errand:30,Personal:30,Birthday:0,Other:30};
 // The "work" types shown on the month grid + legend (life types like Birthday/Personal stay in Agenda/day view only)
@@ -433,7 +441,8 @@ function isMain(t){return MAIN_TYPES.indexOf(t)>=0;}
 var LEGEND_HIDE=['Personal','Birthday','Social']; // types kept out of the color legend
 // Top-level Spaces: PM = Phoenix Method agency (Lori, Sunbright…); PHW = medical-billing employer; Life = personal
 var SPACES=['PM','PHW','Life'];
-var SPACE_META={PM:{e:'🚀'},PHW:{e:'🏥'},Life:{e:'🌱'},Todoist:{e:'✅'}};
+var SPACE_META={PM:{e:'🚀'},PHW:{e:'🏥'},Life:{e:'🌱'},Todoist:{e:'✅'},MsTodo:{e:'📋'}};
+var EXTERNAL_SPACES=['Todoist','MsTodo'];
 function spaceLabel(s){return s==='All'?'All':((SPACE_META[s]?SPACE_META[s].e+' ':'')+s);}
 function inferSpace(it){
   if((it.client||'')==='Personal'||['Birthday','Personal','Appointment','Bill','Health','Errand'].indexOf(it.type)>=0)return 'Life';
@@ -600,11 +609,12 @@ function itemsIn(start,end){
     }
   });
   if(todoistTasks&&todoistTasks.length)items=items.concat(tdItems(start,end));
+  if(msTodoCache)items=items.concat(msItems(start,end));
   return items;
 }
 function fil(items){
-  if(sf==='Todoist')return items.filter(function(i){return i.space==='Todoist';});
-  var out=items.filter(function(i){return i.space!=='Todoist';});
+  if(EXTERNAL_SPACES.indexOf(sf)>=0)return items.filter(function(i){return i.space===sf;});
+  var out=items.filter(function(i){return EXTERNAL_SPACES.indexOf(i.space)<0;});
   if(sf!=='All')out=out.filter(function(i){return (i.space||'PM')===sf;});
   if(cf!=='All')out=out.filter(function(i){return i.client===cf;});
   return out;}
@@ -641,7 +651,7 @@ function renderSummary(){
     '<div class="chip g"><b>'+all.filter(function(i){return i.done;}).length+'</b>done</div>';
 }
 function renderFilters(){
-  var chips=['All'].concat(SPACES);if(S.settings&&S.settings.todoistToken)chips.push('Todoist');
+  var chips=['All'].concat(SPACES);if(S.settings&&S.settings.todoistToken)chips.push('Todoist');if(msConnected())chips.push('MsTodo');
   document.getElementById('filters').innerHTML=chips.map(function(s){return '<button class="fbtn sp'+(sf===s?' on':'')+'" onclick="setSpace(\''+s+'\')">'+spaceLabel(s)+'</button>';}).join('');
   var projs=projectsList();
   if(projs.indexOf(cf)<0)cf='All';
@@ -709,6 +719,7 @@ function renderLegend(){
 
 function rowHTML(i,mv){
   if(i.todoist)return '<div class="row"><div class="check" style="border-color:#e44332;cursor:pointer" onclick="tdComplete(\''+i.key.slice(3)+'\')" title="Complete in Todoist"></div><div class="rbody"><div class="rtitle">'+esc(i.title)+'</div></div><span class="tg" style="background:#e44332">Todoist</span></div>';
+  if(i.mstodo)return '<div class="row"><div class="check" style="border-color:#2564cf;cursor:pointer" onclick="msComplete(\''+i.mslist+'\',\''+i.key.slice(3)+'\')" title="Complete in To Do"></div><div class="rbody"><div class="rtitle">'+esc(i.title)+'</div>'+(i.client?'<div class="rnote">'+esc(i.client)+'</div>':'')+'</div><span class="tg" style="background:#2564cf">To Do</span></div>';
   var editb=i.recurring?'':'<button class="mini" onclick="closeOv(\'dayOv\');closeOv(\'sumOv\');closeOv(\'agOv\');openTask(\''+i.id+'\')">✏️</button>';
   var mvb=mv?'<div style="margin-top:6px;display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:var(--muted)">Move to:</span><input type="date" class="mvd" value="'+i.date+'" onclick="event.stopPropagation()" onchange="moveItem(\''+i.key+'\',this.value)"></div>':'';
   var star='<button class="mini star'+(i.pri?' on':'')+'" onclick="togglePri(\''+i.key+'\')" title="Priority">'+(i.pri?'⭐':'☆')+'</button>';
@@ -1019,7 +1030,7 @@ function toggleBoard(){
   document.getElementById('mainwrap').style.display=boardMode?'none':'';
   document.getElementById('board').style.display=boardMode?'block':'none';
   var b=document.getElementById('boardBtn');if(b)b.textContent=boardMode?'📅 Calendar':'🧩 Board';
-  if(boardMode){renderBoard();if(!wxCache)fetchWx();if(!newsCache.length&&!newsLoading)fetchNews();fetchStocks();}
+  if(boardMode){renderBoard();if(!wxCache)fetchWx();if(!newsCache.length&&!newsLoading)fetchNews();fetchStocks();if(msConnected()&&!msTodoCache)fetchMsTodo();}
 }
 function sizeBoard(){var h=document.querySelector('header').offsetHeight;document.getElementById('board').style.height=(window.innerHeight-h)+'px';}
 function widget(title,body,footer){return '<div class="widget"><div class="wtitle">'+title+'</div><div class="wbody">'+body+'</div>'+(footer||'')+'</div>';}
@@ -1160,6 +1171,8 @@ function boardWidgets(){
   W.push({id:'weather',title:'☀️ Weather',body:wxBody()});
   W.push({id:'news',title:'📰 News',body:newsBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchNews();renderBoard()">↻ refresh</button></div>'});
   W.push({id:'stocks',title:'📈 Watchlist',body:stockBody(),footer:'<div class="wadd"><input placeholder="+ AAPL   (or  AAPL 100)" onkeydown="if(event.key===&quot;Enter&quot;)stockAdd(this)"></div>'});
+  if(msConnected())W.push({id:'mstodo',title:'📋 Microsoft To Do',body:msTodoBody()});
+  if(S.settings&&S.settings.todoistToken)W.push({id:'todoist',title:'✅ Todoist',body:todoistBody()});
   W.push({id:'sticky',title:'📌 Sticky note',body:stickyBody()});
   return W;
 }
@@ -1472,6 +1485,67 @@ function tdComplete(id){var tok=S.settings&&S.settings.todoistToken;if(!tok)retu
   fetch('https://api.todoist.com/api/v1/tasks/'+id+'/close',{method:'POST',headers:{Authorization:'Bearer '+tok}}).then(function(){toast('✓ Completed in Todoist');}).catch(function(){toast('⚠ Could not sync completion');});
 }
 function loadTodoist(){if(S.settings&&S.settings.todoistToken)fetchTodoist();}
+function todoistBody(){
+  if(!(S.settings&&S.settings.todoistToken))return '<div class="wempty">Connect Todoist in ⚙ Settings.</div>';
+  if(!todoistTasks||!todoistTasks.length)return '<div class="wempty">No tasks due today/overdue.</div>';
+  return todoistTasks.map(function(t){return '<div class="brow"><div class="check sm" style="border-color:#e44332" onclick="tdComplete(\''+t.id+'\')"></div><div class="btxt">'+esc(t.content)+(t.due&&t.due.string?' <span class="mut">'+esc(t.due.string)+'</span>':'')+'</div></div>';}).join('');
+}
+
+// ---- Microsoft To Do (token kept ONLY in device localStorage; Worker relays statelessly) ----
+var msTodoCache=null,msLoading=false,msPollTimer=null;
+function msConnected(){return !!localStorage.getItem('msRefreshLocal');}
+function msW(){return (S.settings&&S.settings.worker)?S.settings.worker.replace(/\/+$/,''):'';}
+function msConnect(){
+  var w=msW();var st=document.getElementById('msStatus');
+  if(!w){st.textContent='⚠ Save your Cloudflare Worker URL above first.';return;}
+  st.textContent='Getting a sign-in code…';
+  fetch(w+'/ms/devicecode').then(function(r){return r.json();}).then(function(d){
+    if(!d.user_code){st.textContent='⚠ Could not start sign-in.';return;}
+    st.innerHTML='Go to <a href="'+d.verification_uri+'" target="_blank" rel="noopener"><b>'+d.verification_uri+'</b></a> → enter code <b style="font-size:17px;color:var(--pink)">'+d.user_code+'</b> → sign in &amp; approve <b>Tasks</b>. Waiting…';
+    msPoll(w,d.device_code,(d.interval||5),(d.expires_in||900));
+  }).catch(function(){st.textContent='⚠ Worker unreachable ('+w+').';});
+}
+function msPoll(w,dc,interval,expires){
+  if(msPollTimer)clearTimeout(msPollTimer);var elapsed=0;
+  function tick(){
+    fetch(w+'/ms/poll?device_code='+encodeURIComponent(dc)).then(function(r){return r.json();}).then(function(d){
+      if(d.refresh_token){localStorage.setItem('msRefreshLocal',d.refresh_token);document.getElementById('msStatus').innerHTML='✓ Connected! Tap the 📋 filter or add the “Microsoft To Do” board card.';msTodoCache=null;fetchMsTodo();render();return;}
+      elapsed+=interval;if(elapsed>=expires){document.getElementById('msStatus').textContent='Sign-in timed out — click Connect to try again.';return;}
+      msPollTimer=setTimeout(tick,interval*1000);
+    }).catch(function(){msPollTimer=setTimeout(tick,interval*1000);});
+  }
+  msPollTimer=setTimeout(tick,interval*1000);
+}
+function msDisconnect(){localStorage.removeItem('msRefreshLocal');msTodoCache=null;if(msPollTimer)clearTimeout(msPollTimer);if(sf==='MsTodo')sf='All';var st=document.getElementById('msStatus');if(st)st.textContent='Disconnected (token removed from this device).';render();}
+function fetchMsTodo(){
+  var rt=localStorage.getItem('msRefreshLocal'),w=msW();if(!rt||!w)return;msLoading=true;
+  fetch(w+'/ms/todo',{headers:{'X-MS-Refresh':rt}}).then(function(r){return r.json();}).then(function(d){
+    msLoading=false;
+    if(d.refresh)localStorage.setItem('msRefreshLocal',d.refresh);
+    if(d.lists){msTodoCache=d.lists;refreshOpen();}
+    else if(d.error){msTodoCache=[];refreshOpen();}
+  }).catch(function(){msLoading=false;});
+}
+function msComplete(list,id){
+  var rt=localStorage.getItem('msRefreshLocal'),w=msW();if(!rt||!w)return;
+  if(msTodoCache)msTodoCache.forEach(function(l){if(l.id===list)l.tasks=l.tasks.filter(function(t){return t.id!==id;});});refreshOpen();
+  fetch(w+'/ms/complete?list='+encodeURIComponent(list)+'&id='+encodeURIComponent(id),{method:'POST',headers:{'X-MS-Refresh':rt}}).then(function(r){return r.json();}).then(function(d){if(d.refresh)localStorage.setItem('msRefreshLocal',d.refresh);toast('✓ Completed in To Do');}).catch(function(){});
+}
+function msItems(start,end){
+  if(!msTodoCache)return [];var out=[];
+  msTodoCache.forEach(function(l){(l.tasks||[]).forEach(function(t){if(!t.due)return;var dd=(''+t.due).slice(0,10),d=parse(dd);
+    if(d>=start&&d<=end)out.push({key:'ms|'+t.id,mslist:l.id,space:'MsTodo',client:l.name,type:'MsTodo',title:t.title,date:dd,done:false,recurring:false,amount:0,note:'',time:'',pri:false,mins:'',subs:[],mstodo:true});});});
+  return out;
+}
+function msTodoBody(){
+  if(!msConnected())return '<div class="wempty">Connect in ⚙ Settings → Microsoft To Do.</div>';
+  if(!msTodoCache)return '<div class="wempty">'+(msLoading?'Loading your lists…':'Loading…')+'</div>';
+  if(!msTodoCache.length)return '<div class="wempty">No lists found.</div>';
+  return msTodoCache.map(function(l){
+    return '<div class="agh" style="margin-top:6px">'+esc(l.name)+' <span class="mut">'+(l.tasks?l.tasks.length:0)+'</span></div>'+
+      ((l.tasks&&l.tasks.length)?l.tasks.map(function(t){return '<div class="brow"><div class="check sm" style="border-color:#2564cf" onclick="msComplete(\''+l.id+'\',\''+t.id+'\')"></div><div class="btxt">'+esc(t.title)+(t.due?' <span class="mut">'+parse((''+t.due).slice(0,10)).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</span>':'')+'</div></div>';}).join(''):'<div class="wempty" style="padding:4px 0">— clear —</div>');
+  }).join('');
+}
 
 // ---- Desktop reminders ----
 var notifiedKeys={},notifiedSummaryDay=null;
@@ -1535,9 +1609,11 @@ document.addEventListener('visibilitychange',function(){if(!document.hidden){che
 setTimeout(checkUpdate,6000);
 setInterval(checkUpdate,120000);
 
-// ---- Todoist: pull on load + every 5 min ----
+// ---- Todoist + Microsoft To Do: pull on load + every 5 min ----
 setTimeout(loadTodoist,2500);
 setInterval(loadTodoist,300000);
+setTimeout(function(){if(msConnected())fetchMsTodo();},2800);
+setInterval(function(){if(msConnected())fetchMsTodo();},300000);
 
 // ---- Firebase cloud sync (Firestore, same project as Wellness Tracker) ----
 (function(){
