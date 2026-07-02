@@ -87,6 +87,10 @@
   .mccell.has:after{content:"";position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--pink)}
   .mccell.today.has:after{background:#fff}
   .stickyta{width:100%;height:100%;min-height:130px;border:none;background:transparent;resize:none;color:var(--text);font-size:14px;padding:0}
+  .wxstats{display:flex;flex-wrap:wrap;gap:5px 10px;justify-content:center;font-size:11.5px;color:var(--text)}
+  .wxstats span{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px 8px}
+  .wxdays{display:flex;justify-content:space-between;gap:4px;margin-top:10px}
+  .wxday{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px}
   .filters{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px}
   .fbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:18px;
     padding:5px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
@@ -405,7 +409,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-11'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-02-12'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -1043,10 +1047,22 @@ function miniCalBody(){var t=todayMid(),first=new Date(viewY,viewM,1),gs=addDays
   return h+'</div>';}
 var wxCache=null;
 function fetchWx(){var s=S.settings;if(!s||s.wxLat==null)return;
-  fetch('https://api.open-meteo.com/v1/forecast?latitude='+s.wxLat+'&longitude='+s.wxLon+'&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
-    .then(function(r){return r.json();}).then(function(d){if(d&&d.current){wxCache={temp:Math.round(d.current.temperature_2m),code:d.current.weather_code};if(boardMode)renderBoard();}}).catch(function(){});}
-function wxIcon(c){if(c==null)return '🌡';if(c===0)return '☀️';if(c<=3)return '🌤';if(c<50)return '☁️';if(c<67)return '🌧';if(c<77)return '🌨';if(c<83)return '🌦';return '⛈';}
-function wxBody(){if(!wxCache)return '<div class="wempty">Loading weather…</div>';return '<div style="text-align:center;padding:12px 0"><div style="font-size:44px">'+wxIcon(wxCache.code)+'</div><div style="font-size:34px;font-weight:800">'+wxCache.temp+'°F</div><div class="mut">'+esc(S.settings.wxName||'')+'</div></div>';}
+  fetch('https://api.open-meteo.com/v1/forecast?latitude='+s.wxLat+'&longitude='+s.wxLon+'&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=5')
+    .then(function(r){return r.json();}).then(function(d){if(d&&d.current){wxCache={cur:d.current,daily:d.daily};if(boardMode)renderBoard();}}).catch(function(){});}
+function wxIcon(c){if(c==null)return '🌡';if(c===0)return '☀️';if(c<=2)return '🌤';if(c<=3)return '☁️';if(c<=48)return '🌫';if(c<=57)return '🌦';if(c<=67)return '🌧';if(c<=77)return '🌨';if(c<=82)return '🌧';if(c<=86)return '🌨';return '⛈';}
+function wxText(c){var m={0:'Clear',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Icy fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',56:'Freezing drizzle',57:'Freezing drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',66:'Freezing rain',67:'Freezing rain',71:'Light snow',73:'Snow',75:'Heavy snow',77:'Snow grains',80:'Light showers',81:'Showers',82:'Heavy showers',85:'Snow showers',86:'Snow showers',95:'Thunderstorm',96:'Storm w/ hail',99:'Storm w/ hail'};return m[c]||'—';}
+function wxBody(){
+  if(!wxCache)return '<div class="wempty">Loading weather…</div>';
+  var c=wxCache.cur,dy=wxCache.daily,days='';
+  if(dy&&dy.time)for(var i=1;i<Math.min(5,dy.time.length);i++){var dt=parse(dy.time[i]);
+    days+='<div class="wxday"><span class="mut">'+dt.toLocaleDateString('en-US',{weekday:'short'})+'</span><span style="font-size:18px">'+wxIcon(dy.weather_code[i])+'</span><span><b>'+Math.round(dy.temperature_2m_max[i])+'°</b> <span class="mut">'+Math.round(dy.temperature_2m_min[i])+'°</span></span></div>';}
+  var hi=(dy&&dy.temperature_2m_max)?Math.round(dy.temperature_2m_max[0]):'',lo=(dy&&dy.temperature_2m_min)?Math.round(dy.temperature_2m_min[0]):'';
+  return '<div style="text-align:center"><div style="font-size:42px;line-height:1.1">'+wxIcon(c.weather_code)+'</div>'+
+    '<div style="font-size:34px;font-weight:800;line-height:1">'+Math.round(c.temperature_2m)+'°F</div>'+
+    '<div class="mut" style="margin:2px 0 8px">'+wxText(c.weather_code)+' · '+esc(S.settings.wxName||'')+'</div>'+
+    '<div class="wxstats"><span>Feels '+Math.round(c.apparent_temperature)+'°</span>'+(hi!==''?'<span>H '+hi+'° / L '+lo+'°</span>':'')+'<span>💧 '+Math.round(c.relative_humidity_2m)+'%</span><span>💨 '+Math.round(c.wind_speed_10m)+' mph</span>'+(c.precipitation_probability!=null?'<span>🌂 '+c.precipitation_probability+'%</span>':'')+'</div>'+
+    '<div class="wxdays">'+days+'</div></div>';
+}
 function stickyBody(){return '<textarea class="stickyta" placeholder="Sticky note…" onchange="S.settings.sticky=this.value;save()">'+esc(S.settings.sticky||'')+'</textarea>';}
 function top3Ensure(){var day=iso(todayMid());if(!S.top3[day])S.top3[day]=[{t:'',d:false},{t:'',d:false},{t:'',d:false}];return S.top3[day];}
 function top3Body(){var a=top3Ensure();return a.slice(0,3).map(function(it,i){return '<div class="brow"><div class="check sm '+(it.d?'on':'')+'" onclick="top3Toggle('+i+')">'+(it.d?'✓':'')+'</div><input class="btxt" style="background:transparent;border:none;padding:3px" value="'+esc(it.t)+'" placeholder="Priority '+(i+1)+'" onchange="top3Set('+i+',this.value)"></div>';}).join('');}
