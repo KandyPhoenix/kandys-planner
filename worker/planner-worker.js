@@ -21,6 +21,10 @@ async function msForm(params) {
   });
   return r.json();
 }
+function jwtEmail(idt) {
+  try { let p = idt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); while (p.length % 4) p += '='; const j = JSON.parse(atob(p)); return j.preferred_username || j.email || j.upn || ''; }
+  catch { return ''; }
+}
 
 export default {
   async fetch(req) {
@@ -55,16 +59,17 @@ export default {
     // ── Microsoft To Do — refresh token comes from the browser per request (nothing stored) ──
     if (url.pathname === '/ms/todo') {
       const rt = req.headers.get('X-MS-Refresh'); if (!rt) return json({ error: 'no token' }, 401);
-      const tk = await msForm({ grant_type: 'refresh_token', client_id: MS_CLIENT, refresh_token: rt, scope: 'Tasks.ReadWrite offline_access' });
+      const tk = await msForm({ grant_type: 'refresh_token', client_id: MS_CLIENT, refresh_token: rt, scope: 'Tasks.ReadWrite offline_access openid profile' });
       if (!tk.access_token) return json({ error: 'refresh failed', detail: tk.error_description || tk.error }, 401);
       const at = tk.access_token;
+      const me = jwtEmail(tk.id_token || '');
       const lists = ((await (await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', { headers: { Authorization: 'Bearer ' + at } })).json()).value) || [];
       const out = [];
       for (const l of lists.slice(0, 25)) {
         const tasks = ((await (await fetch('https://graph.microsoft.com/v1.0/me/todo/lists/' + l.id + "/tasks?$top=25&$filter=status ne 'completed'", { headers: { Authorization: 'Bearer ' + at } })).json()).value) || [];
         out.push({ id: l.id, name: l.displayName, tasks: tasks.map((t) => ({ id: t.id, title: t.title, due: (t.dueDateTime && t.dueDateTime.dateTime) || null })) });
       }
-      return json({ lists: out, refresh: tk.refresh_token || rt });
+      return json({ me, lists: out, refresh: tk.refresh_token || rt });
     }
     if (url.pathname === '/ms/complete' && req.method === 'POST') {
       const rt = req.headers.get('X-MS-Refresh'), list = url.searchParams.get('list'), id = url.searchParams.get('id');
