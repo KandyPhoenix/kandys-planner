@@ -34,15 +34,15 @@
   .chip b{font-size:26px;line-height:1.05;color:var(--text)}
   .chip.r b{color:var(--red)}.chip.a b{color:var(--amber)}.chip.g b{color:var(--green)}
   .wrap{max-width:1100px;margin:0 auto;padding:10px 6px 0}
-  .hero{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 2px 12px;padding:16px 18px;border-radius:16px;
+  .hero{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 2px 8px;padding:9px 16px;border-radius:14px;
     background:linear-gradient(135deg,var(--panel2),var(--panel));border:1px solid var(--line);position:relative;overflow:hidden}
   .hero:before{content:"";position:absolute;top:-45%;right:-8%;width:220px;height:220px;border-radius:50%;
     background:radial-gradient(circle,var(--pink),transparent 68%);opacity:.16;pointer-events:none}
   .hero-l{min-width:0;z-index:1}
-  .hero-greet{font-size:19px;font-weight:800}
-  .hero-date{font-size:12px;color:var(--muted);font-weight:700;margin-top:2px}
-  .hero-aff{font-size:13px;color:var(--text);opacity:.86;margin-top:9px;font-style:italic;max-width:460px}
-  .hero-r{display:flex;flex-direction:column;align-items:center;gap:5px;flex:0 0 auto;z-index:1}
+  .hero-greet{font-size:16px;font-weight:800}
+  .hero-date{font-size:11px;color:var(--muted);font-weight:700;margin-top:1px}
+  .hero-aff{font-size:12px;color:var(--text);opacity:.82;margin-top:4px;font-style:italic;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hero-r{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto;z-index:1}
   .ring-t{fill:var(--text);font-size:17px;font-weight:800}
   .ring-l{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
   .winmsg{text-align:center;font-size:14px;font-weight:800;color:var(--pink);margin-top:18px;padding:13px;background:var(--panel2);border:1px solid var(--line);border-radius:12px}
@@ -100,9 +100,11 @@
   .mbadd input{padding:8px 11px;font-size:13px}
   .revleg{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;margin:0 2px 8px}
   .monthbar .mtitle{margin-right:auto}
-  .filterrow{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;padding:2px 0 8px}
+  .filterrow{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;padding:2px 0 6px}
   .filterrow .filters{flex:0 1 auto;padding:0}
-  .filterrow .legend{flex:0 1 auto;margin-left:auto;justify-content:flex-end}
+  .filterrow .nav{margin-left:auto}
+  .monthbar .rev{margin:0}
+  #legend{margin-top:10px;padding-top:6px;border-top:1px solid var(--line)}
   .mtitle{font-size:18px;font-weight:700}
   .nav{display:flex;align-items:center;gap:7px}
   .nav button{background:var(--panel);border:1px solid var(--line);color:var(--text);width:34px;height:34px;border-radius:10px;font-size:17px;cursor:pointer}
@@ -248,16 +250,16 @@
   <div class="hero" id="hero"></div>
   <div class="filterrow">
     <div class="filters" id="filters"></div>
-    <div class="legend" id="legend"></div>
+    <div class="nav"><button id="vtog" class="vtog" onclick="toggleView()">Week</button><button onclick="shiftMonth(-1)">‹</button><button class="today" onclick="goToday()">Today</button><button onclick="shiftMonth(1)">›</button></div>
   </div>
   <div class="filters sub" id="subfilters"></div>
   <div class="monthbar">
     <div class="mtitle" id="mtitle"></div>
-    <div class="nav"><button id="vtog" class="vtog" onclick="toggleView()">Week</button><button onclick="shiftMonth(-1)">‹</button><button class="today" onclick="goToday()">Today</button><button onclick="shiftMonth(1)">›</button></div>
+    <div class="rev" id="rev"></div>
   </div>
-  <div class="rev" id="rev"></div>
   <div class="dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
   <div class="cal" id="cal"></div>
+  <div class="legend" id="legend"></div>
 </div>
 
 <div id="board" class="board"></div>
@@ -403,7 +405,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-6'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-02-7'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -594,7 +596,7 @@ function affirmOfDay(){var d=todayMid();return AFFIRM[(d.getFullYear()*372+d.get
 function greetWord(){var h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening';}
 function greetEmoji(){var h=new Date().getHours();return h<12?'☀️':h<18?'🌤️':'🌙';}
 function progressRing(pct){var r=30,c=(2*Math.PI*r).toFixed(1),off=(c*(1-pct/100)).toFixed(1);
-  return '<svg class="ring" viewBox="0 0 76 76" width="72" height="72"><circle cx="38" cy="38" r="'+r+'" fill="none" stroke="var(--line)" stroke-width="7"/>'+
+  return '<svg class="ring" viewBox="0 0 76 76" width="52" height="52"><circle cx="38" cy="38" r="'+r+'" fill="none" stroke="var(--line)" stroke-width="7"/>'+
     '<circle cx="38" cy="38" r="'+r+'" fill="none" stroke="var(--pink)" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+c+'" stroke-dashoffset="'+off+'" transform="rotate(-90 38 38)" style="transition:stroke-dashoffset .5s"/>'+
     '<text x="38" y="38" text-anchor="middle" dominant-baseline="central" class="ring-t">'+pct+'%</text></svg>';}
 function renderHero(){
