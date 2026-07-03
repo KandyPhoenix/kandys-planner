@@ -426,7 +426,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-02-18'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-03-19'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -457,6 +457,7 @@ function effMins(i){return (i.mins!=null&&i.mins!=='')?+i.mins:(DEFAULT_MINS[i.t
 function fmtDur(m){m=+m||0;if(!m)return '';var h=Math.floor(m/60),mm=m%60;return (h?h+'h':'')+(mm?(h?' ':'')+mm+'m':'');}
 function sumDur(items){return items.reduce(function(s,i){return s+effMins(i);},0);}
 function fmtTime(t){if(!t)return '';var p=(''+t).split(':'),h=+p[0],m=p[1];var ap=h<12?'am':'pm',h12=h%12;if(h12===0)h12=12;return h12+(m&&m!=='00'?':'+m:'')+ap;}
+function fmtMDY(d){var x=new Date(d);return String(x.getMonth()+1).padStart(2,'0')+'/'+String(x.getDate()).padStart(2,'0')+'/'+x.getFullYear();}
 function todayMid(){var d=new Date();d.setHours(0,0,0,0);return d;}
 function iso(d){var x=new Date(d);x.setHours(0,0,0,0);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');}
 function parse(s){var p=(''+s).split('-');var x=new Date(+p[0],+p[1]-1,+p[2]);x.setHours(0,0,0,0);return x;}
@@ -635,7 +636,7 @@ function renderHero(){
   var label=total?(done+'/'+total+' today'):'clear day ✨';
   document.getElementById('hero').innerHTML=
     '<div class="hero-l"><div class="hero-greet">'+greetEmoji()+' '+greetWord()+', Kandy</div>'+
-    '<div class="hero-date">'+t.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</div>'+
+    '<div class="hero-date">'+t.toLocaleDateString('en-US',{weekday:'long'})+', '+fmtMDY(t)+'</div>'+
     '<div class="hero-aff">“'+esc(affirmOfDay())+'”</div></div>'+
     '<div class="hero-r">'+progressRing(pct)+'<div class="ring-l">'+label+'</div></div>';
 }
@@ -690,7 +691,7 @@ function heatTint(list){
 }
 function renderWeek(){
   var sel=parse(selDate),ws=addDays(sel,-sel.getDay()),we=addDays(ws,6);
-  document.getElementById('mtitle').textContent=ws.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' – '+we.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  document.getElementById('mtitle').textContent=fmtMDY(ws)+' – '+fmtMDY(we);
   var ie=incExp(fil(itemsIn(ws,we)));
   document.getElementById('rev').innerHTML=(ie.inc||ie.exp)?('💰 <b>'+money(ie.inc)+'</b> billable'+(ie.exp?(' &nbsp;·&nbsp; 💸 <b class="outv">'+money(ie.exp)+'</b> out'):'')+' this week'):'';
   var items=fil(itemsIn(ws,we)),by={};
@@ -734,7 +735,7 @@ function rowHTML(i,mv){
   var snoozeb=(!i.done)?'<div class="snooze"><button onclick="snooze(\''+i.key+'\',\''+i.date+'\',1)">⏭ Tomorrow</button><button onclick="snooze(\''+i.key+'\',\''+i.date+'\',7)">+1 wk</button></div>':'';
   if(i.amount&&!isExpense(i.type)){var pd=isPaid(i);amt='<div class="ramt'+(pd?' paidv':'')+'">'+money(i.amount)+(pd?' · paid':' · <span class="unpd">unpaid</span>')+' <button class="mini paid" onclick="togglePaid(\''+i.key+'\')" title="Toggle paid">'+(pd?'💵':'🧾')+'</button></div>';}
   return '<div class="row"><div class="check '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div>'+
-    '<div class="rbody"><div class="rtitle '+(i.done?'done':'')+'">'+(i.pri?'<span class="primark">⭐</span> ':'')+tprefix+esc(i.title)+(i.span&&i.end?' <span class="spanlbl">▸ thru '+parse(i.end).toLocaleDateString("en-US",{month:"short",day:"numeric"})+'</span>':'')+'</div>'+
+    '<div class="rbody"><div class="rtitle '+(i.done?'done':'')+'">'+(i.pri?'<span class="primark">⭐</span> ':'')+tprefix+esc(i.title)+(i.span&&i.end?' <span class="spanlbl">▸ thru '+fmtMDY(parse(i.end))+'</span>':'')+'</div>'+
     amt+
     (i.note?'<div class="rnote">'+linkifyNote(i.note)+'</div>':'')+subs+mvb+snoozeb+'</div>'+
     durb+'<span class="tg" style="background:'+typeColor(i.type)+'">'+esc(i.type)+'</span>'+star+editb+'</div>';
@@ -788,7 +789,7 @@ function openDay(){
   var d=parse(selDate);
   var list=fil(itemsIn(d,d)).sort(cmpItem);
   var openMins=sumDur(list.filter(function(i){return !i.done;}));
-  document.getElementById('dayTitle').innerHTML=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+(openMins?' <span class="hdr-dur">· ~'+fmtDur(openMins)+' of work</span>':'');
+  document.getElementById('dayTitle').innerHTML=d.toLocaleDateString('en-US',{weekday:'long'})+', '+fmtMDY(d)+(openMins?' <span class="hdr-dur">· ~'+fmtDur(openMins)+' of work</span>':'');
   var body=list.length?list.map(function(i){return rowHTML(i,true);}).join(''):'<div style="color:var(--muted);padding:10px 0">Nothing due this day yet.</div>';
   body+='<button class="save" onclick="openTask()">+ Add to this day</button>';
   body+='<label style="margin-top:16px">📝 Note for this day</label><textarea id="dayNote" placeholder="Log, thoughts, gratitude…" onchange="S.notes[selDate]=this.value;save();refreshOpen()">'+esc((S.notes&&S.notes[selDate])||'')+'</textarea>';
@@ -948,7 +949,7 @@ function openAgenda(){
   if(overdue.length)body+='<div class="agh r">⚠ Overdue · '+overdue.length+' <button class="rollbtn" onclick="rollOverdue()">→ all to today</button></div>'+overdue.map(function(i){return rowHTML(i,true);}).join('');
   if(!dates.length&&!overdue.length)body='<div style="color:var(--muted);padding:14px 0">Nothing coming up. Enjoy the clear runway. ✨</div>';
   dates.forEach(function(d){
-    var dd=parse(d),lbl=d===iso(t)?'Today':(d===iso(addDays(t,1))?'Tomorrow':dd.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}));
+    var dd=parse(d),lbl=d===iso(t)?'Today':(d===iso(addDays(t,1))?'Tomorrow':fmtMDY(dd));
     var mins=sumDur(groups[d]),durb=mins?' <span class="hdr-dur">· ~'+fmtDur(mins)+'</span>':'';
     body+='<div class="agh'+(d===iso(t)?' a':'')+'">'+lbl+durb+'</div>'+groups[d].sort(cmpItem).map(function(i){return rowHTML(i,false);}).join('');
   });
@@ -963,7 +964,7 @@ function openTimeline(){
   var t=todayMid();
   var all=fil(itemsIn(t,t)).sort(cmpItem);
   var openMins=sumDur(all.filter(function(i){return !i.done;}));
-  document.getElementById('tlTitle').innerHTML='📆 '+t.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+(openMins?' <span class="hdr-dur">· ~'+fmtDur(openMins)+' of work</span>':'');
+  document.getElementById('tlTitle').innerHTML='📆 '+t.toLocaleDateString('en-US',{weekday:'long'})+', '+fmtMDY(t)+(openMins?' <span class="hdr-dur">· ~'+fmtDur(openMins)+' of work</span>':'');
   var timed=all.filter(function(i){return i.time;}),untimed=all.filter(function(i){return !i.time;});
   var body='';
   if(untimed.length)body+='<div class="agh">⏰ Anytime today</div>'+untimed.map(function(i){return rowHTML(i,false);}).join('');
@@ -991,7 +992,7 @@ function runSearch(){
   var hits=items.filter(function(i){return (i.title+' '+i.client+' '+(i.note||'')+' '+i.type).toLowerCase().indexOf(q)>=0;}).sort(function(a,b){return a.date<b.date?-1:1;});
   if(!hits.length){el.innerHTML='<div style="color:var(--muted);padding:8px 0">No matches.</div>';return;}
   el.innerHTML='<div class="hint" style="text-align:left;margin:0 0 4px">'+hits.length+' match'+(hits.length>1?'es':'')+(hits.length>60?' (showing 60)':'')+'</div>'+hits.slice(0,60).map(function(i){
-    var dd=parse(i.date).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    var dd=fmtMDY(parse(i.date));
     return '<div class="srow" onclick="jumpTo(\''+i.date+'\')"><div style="flex:1;min-width:0"><div class="rtitle '+(i.done?'done':'')+'">'+esc(i.title)+'</div><div class="rnote">'+dd+' · '+esc(i.client)+'</div></div><span class="tg" style="background:'+typeColor(i.type)+'">'+esc(i.type)+'</span></div>';
   }).join('');
 }
@@ -1036,7 +1037,7 @@ function sizeBoard(){var h=document.querySelector('header').offsetHeight;documen
 function widget(title,body,footer){return '<div class="widget"><div class="wtitle">'+title+'</div><div class="wbody">'+body+'</div>'+(footer||'')+'</div>';}
 function emptyW(m){return '<div class="wempty">'+m+'</div>';}
 function bTaskRow(i){return '<div class="brow"><div class="check sm '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div><div class="btxt '+(i.done?'done':'')+'">'+(i.time?'<b>'+fmtTime(i.time)+'</b> ':'')+esc(i.title)+'</div><span class="dot" style="background:'+typeColor(i.type)+'"></span></div>';}
-function bUpRow(i){return '<div class="brow"><div class="check sm '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div><div class="btxt '+(i.done?'done':'')+'"><span class="bdate">'+parse(i.date).toLocaleDateString('en-US',{weekday:'short',day:'numeric'})+'</span> '+esc(i.title)+'</div><span class="dot" style="background:'+typeColor(i.type)+'"></span></div>';}
+function bUpRow(i){return '<div class="brow"><div class="check sm '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div><div class="btxt '+(i.done?'done':'')+'"><span class="bdate">'+fmtMDY(parse(i.date))+'</span> '+esc(i.title)+'</div><span class="dot" style="background:'+typeColor(i.type)+'"></span></div>';}
 function bListRow(l,it,i){
   var checkable=(l.type==='checklist'||l.type==='buy');
   var chk=checkable?'<div class="check sm '+(it.done?'on':'')+'" onclick="bListToggle(\''+l.id+'\','+i+')">'+(it.done?'✓':'')+'</div>':'<span class="ldot">•</span>';
@@ -1346,11 +1347,11 @@ function openWeek(){weekOffset=0;renderWeekPlan();document.getElementById('weekO
 function weekAdd(di,inp){var v=inp.value.trim();if(!v)return;var sp=sf!=='All'?sf:'Life';S.oneoffs.push({id:'o'+Date.now(),title:v,space:sp,client:(cf!=='All'?cf:(sp==='Life'?'Personal':sp)),type:sp==='Life'?'Personal':'Other',due:di,done:false});inp.value='';save();renderWeekPlan();render();}
 function renderWeekPlan(){
   var t=todayMid(),base=addDays(t,weekOffset*7),ws=addDays(base,-base.getDay()),tIso=iso(t);
-  document.getElementById('weekTitle').innerHTML='🗓 '+ws.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'–'+addDays(ws,6).toLocaleDateString('en-US',{month:'short',day:'numeric'})+
+  document.getElementById('weekTitle').innerHTML='🗓 '+fmtMDY(ws)+'–'+fmtMDY(addDays(ws,6))+
     ' <button class="rollbtn" style="background:var(--panel2);color:var(--text)" onclick="weekOffset--;renderWeekPlan()">‹</button> <button class="rollbtn" style="background:var(--panel2);color:var(--text)" onclick="weekOffset=0;renderWeekPlan()">Now</button> <button class="rollbtn" style="background:var(--panel2);color:var(--text)" onclick="weekOffset++;renderWeekPlan()">›</button>';
   var body='';
   for(var k=0;k<7;k++){var d=addDays(ws,k),di=iso(d),list=fil(itemsIn(d,d)).sort(cmpItem),mins=sumDur(list.filter(function(i){return !i.done;}));
-    body+='<div class="agh'+(di===tIso?' a':'')+'">'+d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+(mins?' <span class="hdr-dur">~'+fmtDur(mins)+'</span>':'')+'</div>';
+    body+='<div class="agh'+(di===tIso?' a':'')+'">'+d.toLocaleDateString('en-US',{weekday:'long'})+', '+fmtMDY(d)+(mins?' <span class="hdr-dur">~'+fmtDur(mins)+'</span>':'')+'</div>';
     body+=list.map(function(i){return rowHTML(i,false);}).join('');
     body+='<div style="padding:4px 0"><input placeholder="+ add" onkeydown="if(event.key===&quot;Enter&quot;)weekAdd(&quot;'+di+'&quot;,this)" style="font-size:13px;padding:8px 10px"></div>';
   }
@@ -1559,7 +1560,7 @@ function msTodoBody(){
     return (multi?'<div class="agh" style="color:#2564cf">👤 '+esc(acc.email||'account')+'</div>':'')+
       acc.lists.map(function(l){
         return '<div class="agh" style="margin-top:6px">'+esc(l.name)+' <span class="mut">'+(l.tasks?l.tasks.length:0)+'</span></div>'+
-          ((l.tasks&&l.tasks.length)?l.tasks.map(function(t){return '<div class="brow"><div class="check sm" style="border-color:#2564cf" onclick="msComplete(\''+esc(acc.email)+'\',\''+l.id+'\',\''+t.id+'\')"></div><div class="btxt">'+esc(t.title)+(t.due?' <span class="mut">'+parse((''+t.due).slice(0,10)).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</span>':'')+'</div></div>';}).join(''):'<div class="wempty" style="padding:4px 0">— clear —</div>');
+          ((l.tasks&&l.tasks.length)?l.tasks.map(function(t){return '<div class="brow"><div class="check sm" style="border-color:#2564cf" onclick="msComplete(\''+esc(acc.email)+'\',\''+l.id+'\',\''+t.id+'\')"></div><div class="btxt">'+esc(t.title)+(t.due?' <span class="mut">'+fmtMDY(parse((''+t.due).slice(0,10)))+'</span>':'')+'</div></div>';}).join(''):'<div class="wempty" style="padding:4px 0">— clear —</div>');
       }).join('');
   }).join('');
 }
