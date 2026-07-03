@@ -351,6 +351,18 @@
   </div>
   <div class="hint" style="text-align:left;margin:6px 0 0" id="msStatus"></div>
 
+  <label style="margin-top:18px">📈 E*TRADE portfolio</label>
+  <div class="hint" style="text-align:left;margin:0 0 6px">Connect your E*TRADE account to show your real balances &amp; positions as a board card. Your access token is kept <b>only on this device</b> (never synced). E*TRADE tokens expire at midnight ET, so you'll reconnect about once a day. Needs the Worker URL above.</div>
+  <div style="display:flex;gap:8px">
+    <button class="ghost" style="position:static;flex:1" onclick="etConnect()">Connect E*TRADE</button>
+    <button class="ghost" style="position:static;flex:0 0 110px" onclick="etDisconnect()">Disconnect</button>
+  </div>
+  <div id="etAuthBox" style="display:none;margin-top:8px">
+    <input id="etVerifier" placeholder="Paste the E*TRADE verification code here" style="width:100%;box-sizing:border-box">
+    <button class="ghost" style="position:static;width:100%;margin-top:6px" onclick="etSubmitCode()">Finish connecting</button>
+  </div>
+  <div class="hint" style="text-align:left;margin:6px 0 0" id="etStatus"></div>
+
   <label style="margin-top:18px">📆 Calendar export</label>
   <div class="hint" style="text-align:left;margin:0 0 6px">Download an .ics file of the next ~7 months — import it into Google Calendar, Apple Calendar, or Outlook to see your planner items there.</div>
   <button class="ghost" style="position:static;width:100%" onclick="exportICS()">⤓ Export to calendar (.ics)</button>
@@ -426,7 +438,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-03-20'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-03-21'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -1031,7 +1043,7 @@ function toggleBoard(){
   document.getElementById('mainwrap').style.display=boardMode?'none':'';
   document.getElementById('board').style.display=boardMode?'block':'none';
   var b=document.getElementById('boardBtn');if(b)b.textContent=boardMode?'📅 Calendar':'🧩 Board';
-  if(boardMode){renderBoard();if(!wxCache)fetchWx();if(!newsCache.length&&!newsLoading)fetchNews();fetchStocks();if(msConnected()&&!msTodoCache)fetchMsTodo();}
+  if(boardMode){renderBoard();if(!wxCache)fetchWx();if(!newsCache.length&&!newsLoading)fetchNews();fetchStocks();if(msConnected()&&!msTodoCache)fetchMsTodo();if(etConnected()&&!etCache)fetchEtrade();}
 }
 function sizeBoard(){var h=document.querySelector('header').offsetHeight;document.getElementById('board').style.height=(window.innerHeight-h)+'px';}
 function widget(title,body,footer){return '<div class="widget"><div class="wtitle">'+title+'</div><div class="wbody">'+body+'</div>'+(footer||'')+'</div>';}
@@ -1151,6 +1163,68 @@ function stockAdd(inp){var v=inp.value.trim();if(!v)return;var p=v.split(/\s+/),
   if(!S.settings.stocks)S.settings.stocks=[];if(!S.settings.stocks.some(function(x){return x.sym===sym;}))S.settings.stocks.push({sym:sym,sh:sh});
   inp.value='';save();fetchStocks();renderBoard();}
 function delStock(i){S.settings.stocks.splice(i,1);save();renderBoard();}
+// ---- E*TRADE portfolio (OAuth 1.0a via your Worker; token ONLY on this device, never synced) ----
+var etCache=null,etLoading=false;
+function etW(){return (S.settings&&S.settings.worker)?S.settings.worker.replace(/\/+$/,''):'';}
+function etTok(){try{return JSON.parse(localStorage.getItem('etToken')||'null');}catch(e){return null;}}
+function etConnected(){return !!etTok();}
+function etConnect(){
+  var w=etW(),st=document.getElementById('etStatus');
+  if(!w){st.textContent='⚠ Save your Cloudflare Worker URL above first.';return;}
+  st.textContent='Starting E*TRADE sign-in…';
+  fetch(w+'/et/request').then(function(r){return r.json();}).then(function(d){
+    if(!d.oauth_token){st.textContent='⚠ Could not start ('+(d.detail||d.error||'error')+').';return;}
+    localStorage.setItem('etReq',JSON.stringify({ot:d.oauth_token,ots:d.oauth_token_secret}));
+    window.open(d.authorize,'_blank','noopener');
+    document.getElementById('etAuthBox').style.display='block';
+    st.innerHTML='A new tab opened → log in to E*TRADE &amp; approve. Copy the <b>verification code</b> it shows, paste it below, then click Finish.';
+  }).catch(function(){st.textContent='⚠ Worker unreachable.';});
+}
+function etSubmitCode(){
+  var w=etW(),st=document.getElementById('etStatus'),code=(document.getElementById('etVerifier').value||'').trim(),req=null;
+  try{req=JSON.parse(localStorage.getItem('etReq')||'null');}catch(e){}
+  if(!code){st.textContent='Paste the code first.';return;}
+  if(!req){st.textContent='Sign-in expired — click Connect again.';return;}
+  st.textContent='Finishing…';
+  fetch(w+'/et/access?oauth_token='+encodeURIComponent(req.ot)+'&oauth_token_secret='+encodeURIComponent(req.ots)+'&verifier='+encodeURIComponent(code)).then(function(r){return r.json();}).then(function(d){
+    if(!d.oauth_token){st.textContent='⚠ Could not finish ('+(d.detail||d.error||'bad code')+'). Click Connect to try again.';return;}
+    localStorage.setItem('etToken',JSON.stringify({at:d.oauth_token,ats:d.oauth_token_secret}));localStorage.removeItem('etReq');
+    document.getElementById('etAuthBox').style.display='none';document.getElementById('etVerifier').value='';
+    st.innerHTML='✓ Connected! Add the 📈 E*TRADE card on your 🧩 Board.';
+    etCache=null;fetchEtrade();render();
+  }).catch(function(){st.textContent='⚠ Worker unreachable.';});
+}
+function etDisconnect(){localStorage.removeItem('etToken');localStorage.removeItem('etReq');etCache=null;var st=document.getElementById('etStatus');if(st)st.textContent='Disconnected (token removed from this device).';render();}
+function fetchEtrade(){
+  var tok=etTok(),w=etW();if(!tok||!w||etLoading)return;etLoading=true;
+  fetch(w+'/et/portfolio',{headers:{'X-ET-Token':tok.at,'X-ET-Secret':tok.ats}}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+    etLoading=false;
+    if(x.s===401)etCache={expired:true};
+    else if(x.d&&x.d.accounts)etCache={accounts:x.d.accounts};
+    else etCache={err:(x.d&&(x.d.detail||x.d.error))||'error'};
+    if(boardMode)renderBoard();
+  }).catch(function(){etLoading=false;etCache={err:'unreachable'};if(boardMode)renderBoard();});
+}
+function etMoney(n){return (n==null||isNaN(n))?'—':'$'+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function etBody(){
+  if(!etConnected())return '<div class="wempty">Connect in ⚙ Settings → E*TRADE portfolio.</div>';
+  if(!etCache)return '<div class="wempty">'+(etLoading?'Loading your portfolio…':'Loading…')+'</div>';
+  if(etCache.expired)return '<div class="wempty">Session expired (E*TRADE resets tokens at midnight ET). Reconnect in ⚙ Settings.</div>';
+  if(etCache.err)return '<div class="wempty">Couldn’t load ('+esc(etCache.err)+').</div>';
+  if(!etCache.accounts||!etCache.accounts.length)return '<div class="wempty">No accounts found.</div>';
+  return etCache.accounts.map(function(a){
+    var dg=a.dayGain,dgc=(dg==null?'':(dg>=0?'up':'dn'));
+    var head='<div class="agh" style="color:#2564cf">'+esc(a.name)+(a.type?' <span class="mut">'+esc(a.type)+'</span>':'')+'</div>'+
+      '<div class="brow"><div class="btxt">Total value</div><span class="stk"><b>'+etMoney(a.total)+'</b></span></div>'+
+      (dg!=null?'<div class="brow"><div class="btxt">Today</div><span class="stk '+dgc+'">'+(dg>=0?'▲':'▼')+etMoney(Math.abs(dg))+'</span></div>':'')+
+      (a.cash!=null?'<div class="brow"><div class="btxt">Cash</div><span class="stk">'+etMoney(a.cash)+'</span></div>':'');
+    var pos=(a.positions||[]).map(function(p){var up=(p.gain==null||p.gain>=0);
+      return '<div class="brow"><div class="btxt"><b>'+esc(p.sym||'?')+'</b> <span class="mut">'+(p.qty||0)+'</span></div>'+
+        '<span class="stk '+(up?'up':'dn')+'">'+etMoney(p.value)+(p.gainPct!=null?' <small>'+(up?'▲':'▼')+Math.abs(p.gainPct).toFixed(1)+'%</small>':'')+'</span></div>';
+    }).join('');
+    return head+(pos||'<div class="wempty" style="padding:4px 0">No open positions</div>');
+  }).join('');
+}
 function top3Ensure(){var day=iso(todayMid());if(!S.top3[day])S.top3[day]=[{t:'',d:false},{t:'',d:false},{t:'',d:false}];return S.top3[day];}
 function top3Body(){var a=top3Ensure();return a.slice(0,3).map(function(it,i){return '<div class="brow"><div class="check sm '+(it.d?'on':'')+'" onclick="top3Toggle('+i+')">'+(it.d?'✓':'')+'</div><input class="btxt" style="background:transparent;border:none;padding:3px" value="'+esc(it.t)+'" placeholder="Priority '+(i+1)+'" onchange="top3Set('+i+',this.value)"></div>';}).join('');}
 function top3Set(i,v){top3Ensure()[i].t=v;save();}
@@ -1172,6 +1246,7 @@ function boardWidgets(){
   W.push({id:'weather',title:'☀️ Weather',body:wxBody()});
   W.push({id:'news',title:'📰 News',body:newsBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchNews();renderBoard()">↻ refresh</button></div>'});
   W.push({id:'stocks',title:'📈 Watchlist',body:stockBody(),footer:'<div class="wadd"><input placeholder="+ AAPL   (or  AAPL 100)" onkeydown="if(event.key===&quot;Enter&quot;)stockAdd(this)"></div>'});
+  if(etConnected())W.push({id:'etrade',title:'📈 E*TRADE',body:etBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchEtrade();renderBoard()">↻ refresh</button></div>'});
   if(msConnected())W.push({id:'mstodo',title:'📋 Microsoft To Do',body:msTodoBody()});
   if(S.settings&&S.settings.todoistToken)W.push({id:'todoist',title:'✅ Todoist',body:todoistBody()});
   W.push({id:'sticky',title:'📌 Sticky note',body:stickyBody()});
@@ -1632,6 +1707,8 @@ setTimeout(loadTodoist,2500);
 setInterval(loadTodoist,300000);
 setTimeout(function(){if(msConnected())fetchMsTodo();},2800);
 setInterval(function(){if(msConnected())fetchMsTodo();},300000);
+setTimeout(function(){if(etConnected())fetchEtrade();},3200);
+setInterval(function(){if(etConnected()){etCache=null;fetchEtrade();}},300000);
 
 // ---- Firebase cloud sync (Firestore, same project as Wellness Tracker) ----
 (function(){
