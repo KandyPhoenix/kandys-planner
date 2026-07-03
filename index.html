@@ -96,7 +96,7 @@
   .stk{flex:0 0 auto;font-size:12px;font-weight:700;white-space:nowrap}.stk small{font-size:10px}
   .stk.up{color:var(--green)}.stk.dn{color:var(--red)}
   .filters{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px}
-  .fbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:18px;
+  .fbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:10px;
     padding:5px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
   .fbtn.on{background:var(--pink);color:#fff;border-color:var(--pink)}
   .fbtn.sp{font-weight:800}
@@ -152,7 +152,7 @@
   .fab{position:fixed;right:16px;bottom:22px;background:var(--pink);color:#fff;border:none;width:56px;height:56px;
     border-radius:50%;font-size:30px;cursor:pointer;box-shadow:0 6px 22px rgba(255,28,141,.5);z-index:30}
   .barbtn{display:flex;gap:6px;flex-wrap:wrap;justify-content:space-between}
-  .barbtn .ghost{padding:6px 9px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.35);flex:1 1 auto;text-align:center;white-space:nowrap}
+  .barbtn .ghost{padding:6px 9px;font-size:11px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.35);flex:1 1 auto;text-align:center;white-space:nowrap}
   .ghost{background:var(--panel);border:1px solid var(--line);color:var(--text);font-weight:700;border-radius:22px;
     padding:9px 12px;font-size:12px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4)}
   .boardbtn{background:var(--pink);color:#fff;border-color:var(--pink);box-shadow:0 4px 16px rgba(255,28,141,.5)}
@@ -442,7 +442,7 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-07-03-22'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-07-03-23'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
