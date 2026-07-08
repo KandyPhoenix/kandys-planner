@@ -1052,16 +1052,19 @@ function toggleBoard(){
 function sizeBoard(){var h=document.querySelector('header').offsetHeight;document.getElementById('board').style.height=(window.innerHeight-h)+'px';}
 function widget(title,body,footer){return '<div class="widget"><div class="wtitle">'+title+'</div><div class="wbody">'+body+'</div>'+(footer||'')+'</div>';}
 function emptyW(m){return '<div class="wempty">'+m+'</div>';}
-function bTaskRow(i){return '<div class="brow"><div class="check sm '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div><div class="btxt '+(i.done?'done':'')+'">'+(i.time?'<b>'+fmtTime(i.time)+'</b> ':'')+esc(i.title)+'</div><span class="dot" style="background:'+typeColor(i.type)+'"></span></div>';}
-function bUpRow(i){return '<div class="brow"><div class="check sm '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div><div class="btxt '+(i.done?'done':'')+'"><span class="bdate">'+fmtMDY(parse(i.date))+'</span> '+esc(i.title)+'</div><span class="dot" style="background:'+typeColor(i.type)+'"></span></div>';}
+function bTaskRow(i){return '<div class="brow"><div class="check sm '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div><div class="btxt '+(i.done?'done':'')+'" style="cursor:pointer" title="Click to view/edit full item" onclick="selectDay(\''+i.date+'\')">'+(i.time?'<b>'+fmtTime(i.time)+'</b> ':'')+esc(i.title)+'</div><span class="dot" style="background:'+typeColor(i.type)+'"></span></div>';}
+function bUpRow(i){return '<div class="brow"><div class="check sm '+(i.done?'on':'')+'" onclick="toggle(\''+i.key+'\')">'+(i.done?'✓':'')+'</div><div class="btxt '+(i.done?'done':'')+'" style="cursor:pointer" title="Click to view/edit full item" onclick="selectDay(\''+i.date+'\')"><span class="bdate">'+fmtMDY(parse(i.date))+'</span> '+esc(i.title)+'</div><span class="dot" style="background:'+typeColor(i.type)+'"></span></div>';}
 function bListRow(l,it,i){
   var checkable=(l.type==='checklist'||l.type==='buy');
   var chk=checkable?'<div class="check sm '+(it.done?'on':'')+'" onclick="bListToggle(\''+l.id+'\','+i+')">'+(it.done?'✓':'')+'</div>':'<span class="ldot">•</span>';
-  var txt=it.url?'<a href="'+it.url.replace(/"/g,'%22')+'" target="_blank" rel="noopener" class="btxt litxt '+(it.done?'sdone':'')+'">'+esc(it.text)+' ↗</a>':'<span class="btxt '+(it.done?'done':'')+'">'+esc(it.text)+'</span>';
+  var txt=it.url?'<a href="'+it.url.replace(/"/g,'%22')+'" target="_blank" rel="noopener" class="btxt litxt '+(it.done?'sdone':'')+'">'+esc(it.text)+' ↗</a>':'<span class="btxt '+(it.done?'done':'')+'" style="cursor:pointer" title="Click to view/edit full text" onclick="editListItem(\''+l.id+'\','+i+')">'+esc(it.text)+'</span>';
   return '<div class="brow">'+chk+txt+'<button class="mini xs" onclick="bListDel(\''+l.id+'\','+i+')">✕</button></div>';
 }
-function bHabitRow(h){var on=!!S.habitlog[h.id+'|'+iso(todayMid())],st=habitStreak(h.id);return '<div class="brow"><div class="check sm '+(on?'on':'')+'" onclick="bHabit(\''+h.id+'\')">'+(on?'✓':'')+'</div><div class="btxt">'+(h.emoji?esc(h.emoji)+' ':'')+esc(h.name)+(st?' <span class="mut">🔥'+st+'</span>':'')+'</div></div>';}
-function bGoalRow(g){var idx=S.goals.indexOf(g),prog=g.target>0?' <span class="mut">'+g.progress+'/'+g.target+'</span>':'';return '<div class="brow"><div class="check sm '+(g.done?'on':'')+'" onclick="bGoalDone('+idx+')">'+(g.done?'✓':'')+'</div><div class="btxt '+(g.done?'done':'')+'">'+esc(g.text)+prog+'</div></div>';}
+function bHabitRow(h){var on=!!S.habitlog[h.id+'|'+iso(todayMid())],st=habitStreak(h.id);return '<div class="brow"><div class="check sm '+(on?'on':'')+'" onclick="bHabit(\''+h.id+'\')">'+(on?'✓':'')+'</div><div class="btxt" style="cursor:pointer" title="Click to rename" onclick="editHabitName(\''+h.id+'\')">'+(h.emoji?esc(h.emoji)+' ':'')+esc(h.name)+(st?' <span class="mut">🔥'+st+'</span>':'')+'</div></div>';}
+function bGoalRow(g){var idx=S.goals.indexOf(g),prog=g.target>0?' <span class="mut">'+g.progress+'/'+g.target+'</span>':'';return '<div class="brow"><div class="check sm '+(g.done?'on':'')+'" onclick="bGoalDone('+idx+')">'+(g.done?'✓':'')+'</div><div class="btxt '+(g.done?'done':'')+'" style="cursor:pointer" title="Click to view/edit full text" onclick="editGoal('+idx+')">'+esc(g.text)+prog+'</div></div>';}
+function editGoal(idx){var g=S.goals[idx];if(!g)return;var v=prompt('Edit goal:',g.text);if(v===null)return;v=v.trim();if(!v)return;g.text=v;save();if(boardMode)renderBoard();if(document.getElementById('goalsOv').classList.contains('show'))renderGoals();}
+function editListItem(lid,i){var l=S.lists.filter(function(x){return x.id===lid;})[0];if(!l||!l.items[i])return;var v=prompt('Edit item:',l.items[i].text);if(v===null)return;v=v.trim();if(!v)return;l.items[i].text=v;save();if(boardMode)renderBoard();if(activeList===lid)renderLists();}
+function editHabitName(id){var h=S.habits.filter(function(x){return x.id===id;})[0];if(!h)return;var v=prompt('Edit habit name:',h.name);if(v===null)return;v=v.trim();if(!v)return;h.name=v;save();if(boardMode)renderBoard();if(document.getElementById('habitsOv').classList.contains('show'))renderHabits();}
 function moneyMini(){
   var first=new Date(viewY,viewM,1),mEnd=new Date(viewY,viewM,lastDom(viewY,viewM)),m=fil(itemsIn(first,mEnd)),billed=0,paid=0,items=[];
   m.forEach(function(i){if(i.amount&&!isExpense(i.type)){billed+=i.amount;var pd=isPaid(i);if(pd)paid+=i.amount;items.push({i:i,pd:pd});}});
@@ -1159,6 +1162,8 @@ function stockBody(){
     if(q&&s.sh)total+=q.price*s.sh;
     return '<div class="brow"><div class="btxt"><b>'+esc(s.sym)+'</b>'+(s.sh?' <span class="mut">'+s.sh+' sh</span>':'')+'</div>'+
       '<span class="stk '+(up?'up':'dn')+'">'+(price!=null?'$'+price.toFixed(2):'…')+(chg!=null?' <small>'+(up?'▲':'▼')+Math.abs(chg).toFixed(2)+'%</small>':'')+'</span>'+
+      '<button class="mini xs" onclick="moveStock('+i+',-1)"'+(i===0?' disabled':'')+'>↑</button>'+
+      '<button class="mini xs" onclick="moveStock('+i+',1)"'+(i===list.length-1?' disabled':'')+'>↓</button>'+
       '<button class="mini xs" onclick="delStock('+i+')">✕</button></div>';
   }).join('');
   return (total?'<div class="agh" style="margin-top:2px">Holdings: '+money(Math.round(total))+'</div>':'')+rows;
@@ -1167,6 +1172,7 @@ function stockAdd(inp){var v=inp.value.trim();if(!v)return;var p=v.split(/\s+/),
   if(!S.settings.stocks)S.settings.stocks=[];if(!S.settings.stocks.some(function(x){return x.sym===sym;}))S.settings.stocks.push({sym:sym,sh:sh});
   inp.value='';save();fetchStocks();renderBoard();}
 function delStock(i){S.settings.stocks.splice(i,1);save();renderBoard();}
+function moveStock(i,dir){var list=S.settings.stocks;var j=i+dir;if(j<0||j>=list.length)return;var t=list[i];list[i]=list[j];list[j]=t;save();renderBoard();}
 // ---- E*TRADE portfolio (OAuth 1.0a via your Worker; token ONLY on this device, never synced) ----
 var etCache=null,etLoading=false;
 function etW(){return (S.settings&&S.settings.worker)?S.settings.worker.replace(/\/+$/,''):'';}
@@ -1229,6 +1235,32 @@ function etBody(){
     return head+(pos||'<div class="wempty" style="padding:4px 0">No open positions</div>');
   }).join('');
 }
+// ---- Wellness Tracker (read-only cross-read, same Firebase project, doc wellness/data) ----
+var wellCache=null,wellLoading=false;
+function fetchWellness(){
+  if(wellLoading||typeof firebase==='undefined')return;wellLoading=true;
+  try{
+    firebase.firestore().collection('wellness').doc('data').get().then(function(doc){
+      wellLoading=false;
+      if(doc.exists)wellCache=doc.data();else wellCache={};
+      if(boardMode)renderBoard();
+    }).catch(function(){wellLoading=false;wellCache=wellCache||{err:'unreachable'};if(boardMode)renderBoard();});
+  }catch(e){wellLoading=false;}
+}
+var apptTypeEmoji={lab:'🩸',telehealth:'💻',other:'📌'};
+function wellnessBody(){
+  if(!wellCache)return '<div class="wempty">'+(wellLoading?'Loading…':'Loading wellness data…')+'</div>';
+  if(wellCache.err)return '<div class="wempty">Couldn’t load (unreachable).</div>';
+  var today=iso(todayMid());
+  var appts=(wellCache.appointments||[]).filter(function(a){return !a.done&&a.date>=today;})
+    .sort(function(a,b){return (a.date+(a.time||'')).localeCompare(b.date+(b.time||''));});
+  if(!appts.length)return '<div class="wempty">No upcoming lab/telehealth appointments. Add one in Wellness Tracker → Labs tab.</div>';
+  return appts.slice(0,5).map(function(a){
+    var days=Math.round((parse(a.date)-todayMid())/86400000),when=days===0?'Today':days===1?'Tomorrow':days+'d';
+    var label=a.provider||(a.type==='lab'?'Lab Draw':a.type==='telehealth'?'Telehealth':'Appointment');
+    return '<div class="brow"><div class="btxt">'+(apptTypeEmoji[a.type]||'📌')+' <b>'+esc(label)+'</b>'+(a.time?' <span class="mut">'+esc(a.time)+'</span>':'')+'</div><span class="mut">'+when+'</span></div>';
+  }).join('');
+}
 function top3Ensure(){var day=iso(todayMid());if(!S.top3[day])S.top3[day]=[{t:'',d:false},{t:'',d:false},{t:'',d:false}];return S.top3[day];}
 function top3Body(){var a=top3Ensure();return a.slice(0,3).map(function(it,i){return '<div class="brow"><div class="check sm '+(it.d?'on':'')+'" onclick="top3Toggle('+i+')">'+(it.d?'✓':'')+'</div><input class="btxt" style="background:transparent;border:none;padding:3px" value="'+esc(it.t)+'" placeholder="Priority '+(i+1)+'" onchange="top3Set('+i+',this.value)"></div>';}).join('');}
 function top3Set(i,v){top3Ensure()[i].t=v;save();}
@@ -1251,6 +1283,7 @@ function boardWidgets(){
   W.push({id:'news',title:'📰 News',body:newsBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchNews();renderBoard()">↻ refresh</button></div>'});
   W.push({id:'stocks',title:'📈 Watchlist',body:stockBody(),footer:'<div class="wadd"><input placeholder="+ AAPL   (or  AAPL 100)" onkeydown="if(event.key===&quot;Enter&quot;)stockAdd(this)"></div>'});
   if(etConnected())W.push({id:'etrade',title:'📈 E*TRADE',body:etBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchEtrade();renderBoard()">↻ refresh</button></div>'});
+  W.push({id:'wellness',title:'💊 Wellness Tracker',body:wellnessBody(),footer:'<div class="wadd"><button class="ghost" style="position:static;width:100%;padding:6px;font-size:11px" onclick="fetchWellness();renderBoard()">↻ refresh</button></div>'});
   if(msConnected())W.push({id:'mstodo',title:'📋 Microsoft To Do',body:msTodoBody()});
   if(S.settings&&S.settings.todoistToken)W.push({id:'todoist',title:'✅ Todoist',body:todoistBody()});
   W.push({id:'sticky',title:'📌 Sticky note',body:stickyBody()});
@@ -1331,7 +1364,7 @@ function renderGoals(){
   document.getElementById('goalsBody').innerHTML=list.length?list.map(function(g){
     var idx=S.goals.indexOf(g);
     var prog=g.target>0?'<div class="gbar"><div class="gbar-fill" style="width:'+Math.min(100,Math.round(g.progress/g.target*100))+'%"></div></div><div class="gprog">'+g.progress+'/'+g.target+' <button class="mini" onclick="goalProg('+idx+',-1)">−</button><button class="mini" onclick="goalProg('+idx+',1)">+</button></div>':'';
-    return '<div class="row"><div class="check '+(g.done?'on':'')+'" onclick="goalDone('+idx+')">'+(g.done?'✓':'')+'</div><div class="rbody"><div class="rtitle '+(g.done?'done':'')+'">'+esc(g.text)+(g.month==='ongoing'?' <span class="tg" style="background:#9a9aa6;font-size:9px">ongoing</span>':'')+'</div>'+prog+'</div><button class="mini" onclick="delGoal('+idx+')">🗑️</button></div>';
+    return '<div class="row"><div class="check '+(g.done?'on':'')+'" onclick="goalDone('+idx+')">'+(g.done?'✓':'')+'</div><div class="rbody"><div class="rtitle '+(g.done?'done':'')+'" style="cursor:pointer" onclick="editGoal('+idx+')">'+esc(g.text)+(g.month==='ongoing'?' <span class="tg" style="background:#9a9aa6;font-size:9px">ongoing</span>':'')+'</div>'+prog+'</div><button class="mini" onclick="delGoal('+idx+')">🗑️</button></div>';
   }).join(''):'<div style="color:var(--muted);padding:8px 0">No goals yet. Add one below.</div>';
 }
 function addGoal(){var t=document.getElementById('goalIn').value.trim();if(!t)return;var tgt=+document.getElementById('goalTgt').value||0;S.goals.push({id:'g'+Date.now(),text:t,month:curMonthKey(),target:tgt,progress:0,done:false});document.getElementById('goalIn').value='';document.getElementById('goalTgt').value='';save();renderGoals();}
@@ -1366,7 +1399,7 @@ function listItemHTML(l,it,i){
   var cat=(l.type==='links'&&it.cat)?'<span class="tg" style="background:'+catColor(it.cat)+'">'+esc(it.cat)+'</span>':'';
   var txt;
   if(it.url)txt='<a href="'+it.url.replace(/"/g,'%22')+'" target="_blank" rel="noopener" class="litxt '+(it.done?'sdone':'')+'">'+esc(it.text)+' ↗</a>';
-  else txt='<span class="'+(it.done?'sdone':'')+'">'+esc(it.text)+'</span>';
+  else txt='<span class="'+(it.done?'sdone':'')+'" style="cursor:pointer" onclick="editListItem(\''+l.id+'\','+i+')">'+esc(it.text)+'</span>';
   return '<div class="row">'+chk+'<div class="rbody"><div class="rtitle '+(it.done?'done':'')+'">'+txt+'</div></div>'+cat+'<button class="mini" onclick="delListItem('+i+')">🗑️</button></div>';
 }
 function renderLists(){
@@ -1488,7 +1521,7 @@ function renderHabits(){
   var today=iso(todayMid());
   document.getElementById('habBody').innerHTML=S.habits.length?S.habits.map(function(h){
     var on=!!S.habitlog[h.id+'|'+today],st=habitStreak(h.id);
-    return '<div class="row"><div class="check '+(on?'on':'')+'" onclick="toggleHabit(\''+h.id+'\')">'+(on?'✓':'')+'</div><div class="rbody"><div class="rtitle">'+(h.emoji?esc(h.emoji)+' ':'')+esc(h.name)+'</div><div class="rnote">'+(st?'🔥 '+st+'-day streak':'Not done today')+'</div></div><button class="mini" onclick="delHabit(\''+h.id+'\')">🗑️</button></div>';
+    return '<div class="row"><div class="check '+(on?'on':'')+'" onclick="toggleHabit(\''+h.id+'\')">'+(on?'✓':'')+'</div><div class="rbody"><div class="rtitle" style="cursor:pointer" onclick="editHabitName(\''+h.id+'\')">'+(h.emoji?esc(h.emoji)+' ':'')+esc(h.name)+'</div><div class="rnote">'+(st?'🔥 '+st+'-day streak':'Not done today')+'</div></div><button class="mini" onclick="delHabit(\''+h.id+'\')">🗑️</button></div>';
   }).join(''):'<div style="color:var(--muted);padding:8px 0">No habits yet. Add one below (e.g. 💧 Drink water).</div>';
 }
 function addHabit(){var n=document.getElementById('habName').value.trim();if(!n)return;var e=document.getElementById('habEmoji').value.trim();S.habits.push({id:'h'+Date.now(),emoji:e,name:n});document.getElementById('habName').value='';document.getElementById('habEmoji').value='';save();renderHabits();}
@@ -1713,6 +1746,8 @@ setTimeout(function(){if(msConnected())fetchMsTodo();},2800);
 setInterval(function(){if(msConnected())fetchMsTodo();},300000);
 setTimeout(function(){if(etConnected())fetchEtrade();},3200);
 setInterval(function(){if(etConnected()){etCache=null;fetchEtrade();}},300000);
+setTimeout(fetchWellness,3600);
+setInterval(fetchWellness,300000);
 
 // ---- Firebase cloud sync (Firestore, same project as Wellness Tracker) ----
 (function(){
