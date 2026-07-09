@@ -473,7 +473,7 @@ function effMins(i){return (i.mins!=null&&i.mins!=='')?+i.mins:(DEFAULT_MINS[i.t
 function fmtDur(m){m=+m||0;if(!m)return '';var h=Math.floor(m/60),mm=m%60;return (h?h+'h':'')+(mm?(h?' ':'')+mm+'m':'');}
 function sumDur(items){return items.reduce(function(s,i){return s+effMins(i);},0);}
 function fmtTime(t){if(!t)return '';var p=(''+t).split(':'),h=+p[0],m=p[1];var ap=h<12?'am':'pm',h12=h%12;if(h12===0)h12=12;return h12+(m&&m!=='00'?':'+m:'')+ap;}
-function fmtMDY(d){var x=new Date(d);return String(x.getMonth()+1).padStart(2,'0')+'/'+String(x.getDate()).padStart(2,'0')+'/'+x.getFullYear();}
+function fmtMDY(d){var x=new Date(d);return String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')+'-'+x.getFullYear();}
 function todayMid(){var d=new Date();d.setHours(0,0,0,0);return d;}
 function iso(d){var x=new Date(d);x.setHours(0,0,0,0);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');}
 function parse(s){var p=(''+s).split('-');var x=new Date(+p[0],+p[1]-1,+p[2]);x.setHours(0,0,0,0);return x;}
@@ -1077,9 +1077,9 @@ function moneyMini(){
 }
 function cdBody(){var t=todayMid();var rows=S.countdowns.map(function(c,idx){var days=Math.round((parse(c.date)-t)/86400000);
   var lbl=days>0?('in '+days+' day'+(days>1?'s':'')):(days===0?'Today! 🎉':(Math.abs(days)+' day'+(Math.abs(days)>1?'s':'')+' ago'));
-  return '<div class="brow"><div class="btxt">'+(c.emoji?esc(c.emoji)+' ':'')+esc(c.label)+' <span class="mut">'+lbl+'</span></div><button class="mini xs" onclick="delCountdown('+idx+')">✕</button></div>';}).join('');
+  return '<div class="brow"><div class="btxt">'+(c.emoji?esc(c.emoji)+' ':'')+esc(c.label)+' <span class="mut">'+fmtMDY(parse(c.date))+' · '+lbl+'</span></div><button class="mini xs" onclick="delCountdown('+idx+')">✕</button></div>';}).join('');
   return rows||emptyW('No countdowns');}
-function addCountdown(){var l=prompt('Countdown to what?');if(!l||!l.trim())return;var d=prompt('Date (YYYY-MM-DD):');if(!d||!/^\d{4}-\d\d-\d\d$/.test(d.trim())){alert('Please use YYYY-MM-DD');return;}S.countdowns.push({id:'cd'+Date.now(),emoji:'⏳',label:l.trim(),date:d.trim()});save();if(boardMode)renderBoard();}
+function addCountdown(){var l=prompt('Countdown to what?');if(!l||!l.trim())return;var d=prompt('Date (MM-DD-YYYY):');if(!d)return;var m=d.trim().match(/^(\d\d?)[-\/](\d\d?)[-\/](\d{4})$/);if(!m){alert('Please use MM-DD-YYYY');return;}var isoD=m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0');S.countdowns.push({id:'cd'+Date.now(),emoji:'⏳',label:l.trim(),date:isoD});save();if(boardMode)renderBoard();}
 function delCountdown(idx){S.countdowns.splice(idx,1);save();if(boardMode)renderBoard();}
 function miniCalBody(){var t=todayMid(),first=new Date(viewY,viewM,1),gs=addDays(first,-first.getDay()),tIso=iso(t),byd={};
   fil(itemsIn(gs,addDays(gs,41))).forEach(function(i){byd[i.date]=1;});
