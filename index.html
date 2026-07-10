@@ -1248,18 +1248,45 @@ function fetchWellness(){
   }catch(e){wellLoading=false;}
 }
 var apptTypeEmoji={lab:'🩸',telehealth:'💻',other:'📌'};
+var wellLabMarkers=[['testosterone','Total T'],['testosteroneFree','Free T'],['estradiol','E2'],['tsh','TSH'],['ferritin','Ferritin'],['b12','B12']];
+function wellRelPast(dstr){var d=Math.round((todayMid()-parse(dstr))/86400000);return d<=0?'today':d===1?'yesterday':d<30?d+'d ago':fmtMDY(parse(dstr));}
+function wellLabRow(L,key,label){
+  var v=L[key];if(v==null||v===''||v==='null')return '';
+  var num=parseFloat(v),r=(L.ranges||{})[key]||{},lo=parseFloat(r.low),hi=parseFloat(r.high),mark='',style='';
+  if(!isNaN(num)){
+    if(!isNaN(lo)&&num<lo){mark=' ▼';style=' style="color:#c0392b"';}
+    else if(!isNaN(hi)&&num>hi){mark=' ▲';style=' style="color:#c0392b"';}
+  }
+  return '<div class="brow"><div class="btxt mut">'+label+'</div><span class="stk"'+style+'>'+esc(v)+mark+'</span></div>';
+}
 function wellnessBody(){
   if(!wellCache)return '<div class="wempty">'+(wellLoading?'Loading…':'Loading wellness data…')+'</div>';
   if(wellCache.err)return '<div class="wempty">Couldn’t load (unreachable).</div>';
-  var today=iso(todayMid());
+  var today=iso(todayMid()),rows=[];
+  // Upcoming appointments (when any are scheduled)
   var appts=(wellCache.appointments||[]).filter(function(a){return !a.done&&a.date>=today;})
     .sort(function(a,b){return (a.date+(a.time||'')).localeCompare(b.date+(b.time||''));});
-  if(!appts.length)return '<div class="wempty">No upcoming lab/telehealth appointments. Add one in Wellness Tracker → Labs tab.</div>';
-  return appts.slice(0,5).map(function(a){
+  appts.slice(0,3).forEach(function(a){
     var days=Math.round((parse(a.date)-todayMid())/86400000),when=days===0?'Today':days===1?'Tomorrow':days+'d';
     var label=a.provider||(a.type==='lab'?'Lab Draw':a.type==='telehealth'?'Telehealth':'Appointment');
-    return '<div class="brow"><div class="btxt">'+(apptTypeEmoji[a.type]||'📌')+' <b>'+esc(label)+'</b>'+(a.time?' <span class="mut">'+esc(a.time)+'</span>':'')+'</div><span class="mut">'+when+'</span></div>';
-  }).join('');
+    rows.push('<div class="brow"><div class="btxt">'+(apptTypeEmoji[a.type]||'📌')+' <b>'+esc(label)+'</b>'+(a.time?' <span class="mut">'+esc(a.time)+'</span>':'')+'</div><span class="mut">'+when+'</span></div>');
+  });
+  // Latest lab panel + key markers
+  var labs=(wellCache.labResults||[]).filter(function(l){return l&&l.date;}).sort(function(a,b){return a.date<b.date?1:-1;});
+  if(labs.length){
+    var L=labs[0];
+    rows.push('<div class="brow"><div class="btxt">🩸 <b>Latest labs</b></div><span class="mut">'+wellRelPast(L.date)+'</span></div>');
+    wellLabMarkers.forEach(function(m){var r=wellLabRow(L,m[0],m[1]);if(r)rows.push(r);});
+  }
+  // Daily log status
+  var logs=wellCache.dailyLogs||{};
+  if(logs[today])rows.push('<div class="brow"><div class="btxt">📝 <b>Daily log</b></div><span class="mut">logged today ✓</span></div>');
+  else{var lk=Object.keys(logs).sort().pop();rows.push('<div class="brow"><div class="btxt">📝 <b>Daily log</b></div><span class="mut">'+(lk?('last '+wellRelPast(lk)):'none yet')+'</span></div>');}
+  // Meds tracked
+  var meds=(wellCache.medications||[]).length;
+  if(meds)rows.push('<div class="brow"><div class="btxt">💊 <b>Daily meds</b></div><span class="mut">'+meds+' tracked</span></div>');
+  if(!rows.length)return '<div class="wempty">No wellness data yet. Add appointments, labs or a daily log in the Wellness Tracker.</div>';
+  return rows.join('');
 }
 function top3Ensure(){var day=iso(todayMid());if(!S.top3[day])S.top3[day]=[{t:'',d:false},{t:'',d:false},{t:'',d:false}];return S.top3[day];}
 function top3Body(){var a=top3Ensure();return a.slice(0,3).map(function(it,i){return '<div class="brow"><div class="check sm '+(it.d?'on':'')+'" onclick="top3Toggle('+i+')">'+(it.d?'✓':'')+'</div><input class="btxt" style="background:transparent;border:none;padding:3px" value="'+esc(it.t)+'" placeholder="Priority '+(i+1)+'" onchange="top3Set('+i+',this.value)"></div>';}).join('');}
