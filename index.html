@@ -1320,10 +1320,10 @@ function renderBoard(){
   sizeBoard();
   if(!S.settings.board)S.settings.board={};if(!S.settings.board.pos)S.settings.board.pos={};
   var pos=S.settings.board.pos,board=document.getElementById('board');
-  var cw=board.clientWidth||1000,COLW=320,GAP=12,cols=Math.max(1,Math.floor((cw-GAP)/(COLW+GAP))),changed=false;
+  var cw=board.clientWidth||1000,COLW=320,GAP=12,cols=Math.max(1,Math.floor((cw-GAP)/(COLW+GAP))),changed=false,fresh=[];
   var html=boardWidgets().map(function(w,idx){
     var p=pos[w.id];
-    if(!p){var col=idx%cols,row=Math.floor(idx/cols);p={x:GAP+col*(COLW+GAP),y:GAP+row*312,w:COLW,h:300};pos[w.id]=p;changed=true;}
+    if(!p){var col=idx%cols,row=Math.floor(idx/cols);p={x:GAP+col*(COLW+GAP),y:GAP+row*312,w:COLW,h:300};pos[w.id]=p;changed=true;fresh.push(w.id);}
     return '<div class="widget" data-wid="'+w.id+'" style="left:'+p.x+'px;top:'+p.y+'px;width:'+p.w+'px;height:'+p.h+'px">'+
       '<div class="wtitle" onpointerdown="boardMoveStart(event,\''+w.id+'\')" title="Drag to move"><span class="grip">⠿</span> '+w.title+'</div>'+
       '<div class="wbody">'+w.body+'</div>'+(w.footer||'')+
@@ -1331,23 +1331,51 @@ function renderBoard(){
     '</div>';
   }).join('');
   board.innerHTML='<div class="bcanvas" id="bcanvas">'+html+'</div>';
+  // Nudge any auto-placed card off of ones the user already positioned, so nothing spawns hidden behind another.
+  fresh.forEach(function(id){resolveOverlap(id);applyPos(id);});
   if(changed)save();
   sizeCanvas();
 }
 function sizeCanvas(){var c=document.getElementById('bcanvas');if(!c)return;var mr=600,mb=300;
   [].forEach.call(c.querySelectorAll('.widget'),function(el){mr=Math.max(mr,el.offsetLeft+el.offsetWidth+40);mb=Math.max(mb,el.offsetTop+el.offsetHeight+40);});
   c.style.width=mr+'px';c.style.height=mb+'px';}
-function savePos(id){var el=document.querySelector('[data-wid="'+id+'"]');if(!el)return;
+var BGAP=12;
+function capturePos(id){var el=document.querySelector('[data-wid="'+id+'"]');if(!el)return;
   if(!S.settings.board)S.settings.board={};if(!S.settings.board.pos)S.settings.board.pos={};
-  S.settings.board.pos[id]={x:Math.round(el.offsetLeft),y:Math.round(el.offsetTop),w:Math.round(el.offsetWidth),h:Math.round(el.offsetHeight)};save();}
+  S.settings.board.pos[id]={x:Math.round(el.offsetLeft),y:Math.round(el.offsetTop),w:Math.round(el.offsetWidth),h:Math.round(el.offsetHeight)};}
+function rOverlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
+function visibleWids(exceptId){return [].map.call(document.querySelectorAll('.widget'),function(el){return el.getAttribute('data-wid');}).filter(function(k){return k&&k!==exceptId;});}
+// Keep cards from overlapping: nudge `id` out of any card it lands on, cascading, with a stack-at-bottom safety net.
+function resolveOverlap(id){
+  var pos=S.settings.board.pos,me=pos[id];if(!me)return;
+  var ids=visibleWids(id).filter(function(k){return pos[k];});
+  var guard=0;
+  while(guard++<400){
+    var hit=null;
+    for(var i=0;i<ids.length;i++){if(rOverlap(me,pos[ids[i]])){hit=pos[ids[i]];break;}}
+    if(!hit)break;
+    var opts=[{ax:'x',d:(hit.x+hit.w+BGAP)-me.x},{ax:'x',d:(hit.x-BGAP)-(me.x+me.w)},
+              {ax:'y',d:(hit.y+hit.h+BGAP)-me.y},{ax:'y',d:(hit.y-BGAP)-(me.y+me.h)}]
+             .sort(function(a,b){return Math.abs(a.d)-Math.abs(b.d);});
+    var moved=false;
+    for(var j=0;j<opts.length;j++){var o=opts[j],nx=me.x+(o.ax==='x'?o.d:0),ny=me.y+(o.ax==='y'?o.d:0);
+      if(nx>=0&&ny>=0){me.x=nx;me.y=ny;moved=true;break;}}
+    if(!moved)me.y=hit.y+hit.h+BGAP;
+  }
+  var still=false;for(var s=0;s<ids.length;s++){if(rOverlap(me,pos[ids[s]])){still=true;break;}}
+  if(still){var mb=0;ids.forEach(function(k){mb=Math.max(mb,pos[k].y+pos[k].h);});me.y=mb+BGAP;me.x=Math.max(0,me.x);}
+}
+function applyPos(id){var el=document.querySelector('[data-wid="'+id+'"]'),p=S.settings.board.pos[id];if(!el||!p)return;
+  el.style.left=p.x+'px';el.style.top=p.y+'px';el.style.width=p.w+'px';el.style.height=p.h+'px';}
+function settlePos(id){capturePos(id);resolveOverlap(id);applyPos(id);save();sizeCanvas();}
 var mv=null;
 function boardMoveStart(e,id){if(e.button)return;e.preventDefault();var el=e.target.closest('.widget');mv={el:el,id:id,sx:e.clientX,sy:e.clientY,ox:el.offsetLeft,oy:el.offsetTop};el.style.zIndex=20;el.classList.add('dragging');try{e.target.setPointerCapture(e.pointerId);}catch(_){}document.addEventListener('pointermove',boardMoveMove);document.addEventListener('pointerup',boardMoveEnd);}
 function boardMoveMove(e){if(!mv)return;mv.el.style.left=Math.max(0,mv.ox+(e.clientX-mv.sx))+'px';mv.el.style.top=Math.max(0,mv.oy+(e.clientY-mv.sy))+'px';}
-function boardMoveEnd(){if(!mv)return;document.removeEventListener('pointermove',boardMoveMove);document.removeEventListener('pointerup',boardMoveEnd);mv.el.style.zIndex='';mv.el.classList.remove('dragging');savePos(mv.id);sizeCanvas();mv=null;}
+function boardMoveEnd(){if(!mv)return;document.removeEventListener('pointermove',boardMoveMove);document.removeEventListener('pointerup',boardMoveEnd);mv.el.style.zIndex='';mv.el.classList.remove('dragging');settlePos(mv.id);mv=null;}
 var rz=null;
 function boardResizeStart(e,id){e.preventDefault();e.stopPropagation();var el=e.target.closest('.widget');rz={el:el,id:id,sx:e.clientX,sy:e.clientY,sw:el.offsetWidth,sh:el.offsetHeight};try{e.target.setPointerCapture(e.pointerId);}catch(_){}document.addEventListener('pointermove',boardResizeMove);document.addEventListener('pointerup',boardResizeEnd);}
 function boardResizeMove(e){if(!rz)return;rz.el.style.width=Math.max(200,Math.min(1000,rz.sw+(e.clientX-rz.sx)))+'px';rz.el.style.height=Math.max(110,Math.min(1400,rz.sh+(e.clientY-rz.sy)))+'px';}
-function boardResizeEnd(){if(!rz)return;document.removeEventListener('pointermove',boardResizeMove);document.removeEventListener('pointerup',boardResizeEnd);savePos(rz.id);sizeCanvas();rz=null;}
+function boardResizeEnd(){if(!rz)return;document.removeEventListener('pointermove',boardResizeMove);document.removeEventListener('pointerup',boardResizeEnd);settlePos(rz.id);rz=null;}
 function resetBoard(){S.settings.board={pos:{}};save();if(boardMode)renderBoard();alert('Board layout reset.');}
 function bAddToday(){var e=document.getElementById('bqadd'),v=e?e.value.trim():'';if(!v)return;var sp=sf!=='All'?sf:'Life';S.oneoffs.push({id:'o'+Date.now(),title:v,space:sp,client:(cf!=='All'?cf:(sp==='Life'?'Personal':sp)),type:sp==='Life'?'Personal':'Other',due:iso(todayMid()),done:false});save();renderBoard();}
 function bListAdd(lid){var e=document.getElementById('bl_'+lid),v=e?e.value.trim():'';if(!v)return;var l=S.lists.filter(function(x){return x.id===lid;})[0];if(!l)return;var it={id:'i'+Date.now(),text:v};if(l.type==='checklist'||l.type==='buy')it.done=false;l.items.unshift(it);save();renderBoard();}
