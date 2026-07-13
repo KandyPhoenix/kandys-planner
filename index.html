@@ -291,7 +291,8 @@
   <h2 id="taskTitle">Add task</h2>
   <label>What needs doing</label><input id="tTitle" placeholder="e.g. Publish blog post">
   <div style="display:flex;gap:10px"><div style="flex:0 0 40%"><label>Space</label><select id="tSpace"></select></div><div style="flex:1"><label>Project / Client</label><input id="tClient" placeholder="Lori, Sunbright, Health…" list="clients"><datalist id="clients"></datalist></div></div>
-  <label>Type</label><select id="tType"></select>
+  <label>Type</label><select id="tType" onchange="onTypeChange()"></select>
+  <input id="tTypeCustom" placeholder="Enter custom type" style="display:none;margin-top:6px">
   <div style="display:flex;gap:10px"><div style="flex:1"><label>Date</label><input id="tDue" type="date"></div><div style="flex:1"><label>End date (optional)</label><input id="tEnd" type="date"></div></div>
   <label>Time (optional)</label><input id="tTime" type="time">
   <label style="display:flex;align-items:center;gap:9px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--text);margin-top:13px;cursor:pointer"><label class="sw" style="margin:0"><input type="checkbox" id="tPri"><span class="sl"></span></label> ⭐ Mark as priority</label>
@@ -850,7 +851,19 @@ function cmpItem(a,b){
 function incExp(items){var inc=0,exp=0;items.forEach(function(i){if(!i.amount)return;if(isExpense(i.type))exp+=i.amount;else inc+=i.amount;});return{inc:inc,exp:exp};}
 
 var editId=null,editSubs=[];
-function fillTypes(sel,val){sel.innerHTML=TYPES.map(function(t){return '<option '+(t===val?'selected':'')+'>'+t+'</option>';}).join('');}
+function fillTypes(sel,val){
+  var isCustom=val&&TYPES.indexOf(val)<0;
+  sel.innerHTML=TYPES.map(function(t){return '<option '+(t===val?'selected':'')+'>'+t+'</option>';}).join('')+'<option value="Custom…"'+(isCustom?' selected':'')+'>Custom…</option>';
+  var ci=document.getElementById('tTypeCustom');
+  ci.style.display=isCustom?'block':'none';
+  ci.value=isCustom?val:'';
+}
+function onTypeChange(){
+  var sel=document.getElementById('tType'),ci=document.getElementById('tTypeCustom');
+  ci.style.display=sel.value==='Custom…'?'block':'none';
+  if(sel.value==='Custom…')ci.focus();
+  var tmEl=document.getElementById('tMins');tmEl.placeholder='auto ('+(fmtDur(DEFAULT_MINS[sel.value]||0)||'—')+')';
+}
 function renderSubEditor(){
   document.getElementById('tSubs').innerHTML=editSubs.map(function(s,i){
     return '<div style="display:flex;gap:6px;margin-top:5px"><input value="'+esc(s.t)+'" placeholder="Subtask" oninput="editSubs['+i+'].t=this.value" style="flex:1;font-size:13px;padding:8px"><button class="mini" onclick="editSubs.splice('+i+',1);renderSubEditor()">🗑️</button></div>';
@@ -874,7 +887,6 @@ function openTask(id){
   document.getElementById('tPri').checked=!!(o&&o.pri);
   document.getElementById('tMins').value=(o&&o.mins!=null&&o.mins!=='')?o.mins:'';
   var tmEl=document.getElementById('tMins');tmEl.placeholder='auto ('+(fmtDur(DEFAULT_MINS[o?o.type:document.getElementById('tType').value]||0)||'—')+')';
-  document.getElementById('tType').onchange=function(){tmEl.placeholder='auto ('+(fmtDur(DEFAULT_MINS[this.value]||0)||'—')+')';};
   document.getElementById('tAmt').value=o&&o.amount?o.amount:'';
   document.getElementById('tRemind').value=(o&&o.remind)?o.remind:'';
   document.getElementById('tNote').value=o&&o.note?o.note:'';
@@ -887,7 +899,9 @@ function saveTask(){
   var subs=editSubs.filter(function(s){return s.t&&s.t.trim();}).map(function(s){return{t:s.t.trim(),d:!!s.d};});
   var mv=document.getElementById('tMins').value;
   var du=document.getElementById('tDue').value,en=document.getElementById('tEnd').value;
-  var data={title:t,space:document.getElementById('tSpace').value,client:document.getElementById('tClient').value.trim()||'Lori',type:document.getElementById('tType').value,
+  var typeVal=document.getElementById('tType').value;
+  if(typeVal==='Custom…')typeVal=document.getElementById('tTypeCustom').value.trim()||'Other';
+  var data={title:t,space:document.getElementById('tSpace').value,client:document.getElementById('tClient').value.trim()||'Lori',type:typeVal,
     due:du,end:(en&&en>du)?en:'',time:document.getElementById('tTime').value||'',pri:document.getElementById('tPri').checked,
     mins:(mv===''?'':+mv),amount:+document.getElementById('tAmt').value||0,remind:+document.getElementById('tRemind').value||0,note:document.getElementById('tNote').value.trim(),subs:subs};
   if(editId)Object.assign(S.oneoffs.filter(function(x){return x.id==editId;})[0],data);
