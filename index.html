@@ -1811,7 +1811,7 @@ setInterval(fetchWellness,300000);
 })();
 
 var PLANNER_WORKER='https://planner.phoenixmethod.workers.dev';
-var VAPID_PUBLIC_KEY='BO9e7WsKYMLszuLrzWdfuDcSeYlwSGLQT5D0JTQKJLBP904-2gKHY_uw1VglWKNC6B4c2eRCZPWRC2tIpK6wxbY';
+var VAPID_PUBLIC_KEY='BEWRBAH4Za1giDa6WRikHKxOS2OaVb8EXNFN5o0H5Ty_xJG77rhHLnOchfgsFaVY_M8Psn-HCzohyhkBLItqeqw';
 function urlBase64ToUint8Array(base64String){
   var padding='='.repeat((4-base64String.length%4)%4);
   var base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
@@ -1824,10 +1824,12 @@ function enablePushNotifications(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){if(el)el.textContent='⚠ Push notifications are not supported in this browser.';return;}
   navigator.serviceWorker.register('sw.js').then(function(reg){
     return reg.pushManager.getSubscription().then(function(sub){
-      if(sub)return sub;
-      return Notification.requestPermission().then(function(perm){
-        if(perm!=='granted')throw new Error('Notification permission denied');
-        return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
+      var unsub=sub?sub.unsubscribe():Promise.resolve();
+      return unsub.then(function(){
+        return Notification.requestPermission().then(function(perm){
+          if(perm!=='granted')throw new Error('Notification permission denied');
+          return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
+        });
       });
     });
   }).then(function(sub){

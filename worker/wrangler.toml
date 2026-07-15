@@ -1,11 +1,10 @@
 name = "planner"
 main = "planner-worker.js"
 compatibility_date = "2024-11-01"
-compatibility_flags = ["nodejs_compat"]
 
 [vars]
 MS_CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
-VAPID_PUBLIC_KEY = "BO9e7WsKYMLszuLrzWdfuDcSeYlwSGLQT5D0JTQKJLBP904-2gKHY_uw1VglWKNC6B4c2eRCZPWRC2tIpK6wxbY"
+VAPID_PUBLIC_KEY = "BEWRBAH4Za1giDa6WRikHKxOS2OaVb8EXNFN5o0H5Ty_xJG77rhHLnOchfgsFaVY_M8Psn-HCzohyhkBLItqeqw"
 REMINDER_EMAIL_TO = "kandyphoenix@hotmail.com"
 
 [[kv_namespaces]]

@@ -7,7 +7,7 @@
 // browser's localStorage and are sent per-request.
 // Deploy: wrangler deploy --config <this dir>/wrangler.toml  (--dry-run first)
 
-import webpush from 'web-push';
+import { ApplicationServerKeys, generatePushHTTPRequest } from 'webpush-webcrypto';
 
 const MS_CLIENT = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // public client
 const FIRESTORE_DOC_URL = 'https://firestore.googleapis.com/v1/projects/wellness-tracker-127/databases/(default)/documents/wellness/servicesPlanner';
@@ -78,10 +78,22 @@ function dueItemsInRange(data, startISO, endISO) {
 }
 
 async function sendPush(env, subscription, payload) {
-  if (!subscription || !env.VAPID_PRIVATE_KEY) return;
-  webpush.setVapidDetails('mailto:' + (env.REMINDER_EMAIL_TO || 'kandyphoenix@hotmail.com'), env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
-  try { await webpush.sendNotification(subscription, JSON.stringify(payload)); }
-  catch (e) { console.log('push send failed', e.message); }
+  if (!subscription || !env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return;
+  try {
+    const applicationServerKeys = await ApplicationServerKeys.fromJSON({
+      publicKey: env.VAPID_PUBLIC_KEY,
+      privateKey: env.VAPID_PRIVATE_KEY,
+    });
+    const { headers, body, endpoint } = await generatePushHTTPRequest({
+      applicationServerKeys,
+      payload: JSON.stringify(payload),
+      target: subscription,
+      adminContact: 'mailto:' + (env.REMINDER_EMAIL_TO || 'kandyphoenix@hotmail.com'),
+      ttl: 60 * 60 * 24,
+    });
+    const r = await fetch(endpoint, { method: 'POST', headers, body });
+    if (!r.ok) console.log('push send failed', r.status, await r.text());
+  } catch (e) { console.log('push send failed', e.message); }
 }
 async function sendEmail(env, subject, html) {
   if (!env.RESEND_API_KEY) return;
