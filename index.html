@@ -333,6 +333,11 @@
     🔔 Desktop reminders</label>
   <div class="hint" style="text-align:left;margin:4px 0 0" id="notifyHint">Ping me for items due today &amp; at their set time (keep this app open/installed).</div>
 
+  <label style="margin-top:18px">📲 Push + Email Reminders (works even when this app is closed)</label>
+  <div class="hint" style="text-align:left;margin:0 0 6px">Get a real push notification on this device plus an email when something's due today or inside its reminder window (checked once daily).</div>
+  <button onclick="enablePushNotifications()" style="width:auto;padding:8px 16px">Enable Push Notifications</button>
+  <div class="hint" style="text-align:left;margin:6px 0 0" id="pushStatus"></div>
+
   <label style="margin-top:18px">🔗 Todoist (optional)</label>
   <div class="hint" style="text-align:left;margin:0 0 6px">Paste your Todoist API token — your <b>today + overdue</b> tasks show as their own <b>✅ Todoist</b> filter/calendar. Tap ✓ on one to complete it in Todoist. Stored only in your browser + private sync, never in the public site.</div>
   <input id="setTodoist" type="password" placeholder="Todoist API token" autocomplete="off">
@@ -1805,7 +1810,35 @@ setInterval(fetchWellness,300000);
   }catch(e){setSync('⚠ offline (local)');}
 })();
 
-if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}
+var PLANNER_WORKER='https://planner.phoenixmethod.workers.dev';
+var VAPID_PUBLIC_KEY='BO9e7WsKYMLszuLrzWdfuDcSeYlwSGLQT5D0JTQKJLBP904-2gKHY_uw1VglWKNC6B4c2eRCZPWRC2tIpK6wxbY';
+function urlBase64ToUint8Array(base64String){
+  var padding='='.repeat((4-base64String.length%4)%4);
+  var base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  var raw=atob(base64),out=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+function enablePushNotifications(){
+  var el=document.getElementById('pushStatus');
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)){if(el)el.textContent='⚠ Push notifications are not supported in this browser.';return;}
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    return reg.pushManager.getSubscription().then(function(sub){
+      if(sub)return sub;
+      return Notification.requestPermission().then(function(perm){
+        if(perm!=='granted')throw new Error('Notification permission denied');
+        return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
+      });
+    });
+  }).then(function(sub){
+    return fetch(PLANNER_WORKER+'/push-subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(sub)});
+  }).then(function(){
+    if(el)el.textContent='✓ Push notifications enabled on this device.';
+  }).catch(function(e){
+    if(el)el.textContent='⚠ '+e.message;
+  });
+}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
 </body>
 </html>

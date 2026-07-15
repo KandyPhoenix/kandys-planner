@@ -1,12 +1,139 @@
 // ── Kandy's Planner — Cloudflare Worker ──────────────────────────────
 // Stateless relay: news/quotes CORS proxy + Microsoft To Do + E*TRADE.
-// It STORES NOTHING user-specific. The Microsoft refresh token and the E*TRADE
-// access token/secret live only in the browser's localStorage and are sent
-// per-request; the Worker just signs/forwards to the provider. The E*TRADE
-// CONSUMER key/secret are Worker secrets (env.ETRADE_KEY / env.ETRADE_SECRET).
+// It STORES NOTHING user-specific except a push subscription + a small
+// server-side "already notified" log, both persisted in the same Firestore
+// doc the planner app itself uses (wellness/servicesPlanner). The Microsoft
+// refresh token and the E*TRADE access token/secret still live only in the
+// browser's localStorage and are sent per-request.
 // Deploy: wrangler deploy --config <this dir>/wrangler.toml  (--dry-run first)
 
+import webpush from 'web-push';
+
 const MS_CLIENT = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // public client
+const FIRESTORE_DOC_URL = 'https://firestore.googleapis.com/v1/projects/wellness-tracker-127/databases/(default)/documents/wellness/servicesPlanner';
+
+// ── Firestore read/modify/write of the single `json` string field ──
+async function getPlannerJson() {
+  const r = await fetch(FIRESTORE_DOC_URL);
+  const doc = await r.json();
+  return JSON.parse(doc.fields.json.stringValue);
+}
+async function putPlannerJson(data) {
+  const body = { fields: { json: { stringValue: JSON.stringify(data) } } };
+  await fetch(FIRESTORE_DOC_URL + '?updateMask.fieldPaths=json', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+// ── Recurring-rule + one-off due-date math, mirrored from index.html instancesIn()/itemsIn() ──
+function lastDom(y, m) { return new Date(y, m + 1, 0).getDate(); }
+function toISO(d) { return d.toISOString().slice(0, 10); }
+function parseISO(s) { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); }
+
+function dueItemsInRange(data, startISO, endISO) {
+  const start = parseISO(startISO), end = parseISO(endISO);
+  const skip = data.skip || {}, done = data.done || {};
+  const out = [];
+  for (const r of (data.rules || [])) {
+    if (!r.active) continue;
+    const rs = r.start ? parseISO(r.start) : null;
+    const ok = (d) => !rs || d >= rs;
+    if (r.freq === 'monthly' || r.freq === 'quarterly') {
+      const anc = rs || start;
+      const ancIdx = anc.getUTCFullYear() * 12 + anc.getUTCMonth();
+      const step = r.freq === 'quarterly' ? 3 : 1;
+      let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+      while (cur <= end) {
+        const idx = cur.getUTCFullYear() * 12 + cur.getUTCMonth();
+        if ((!rs || idx >= ancIdx) && (idx - ancIdx) % step === 0) {
+          const day = Math.min(r.dom || 1, lastDom(cur.getUTCFullYear(), cur.getUTCMonth()));
+          const dm = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), day));
+          if (dm >= start && dm <= end && ok(dm)) {
+            const key = r.id + '|' + toISO(dm);
+            if (!skip[key] && !done[key]) out.push({ key, date: toISO(dm), title: r.title, client: r.client, remind: r.remind || 0, amount: r.amount || 0 });
+          }
+        }
+        cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+      }
+    } else if (r.freq === 'yearly') {
+      const mo = r.month || 0;
+      for (let y = start.getUTCFullYear(); y <= end.getUTCFullYear(); y++) {
+        const day = Math.min(r.dom || 1, lastDom(y, mo));
+        const dy = new Date(Date.UTC(y, mo, day));
+        if (dy >= start && dy <= end && ok(dy)) {
+          const key = r.id + '|' + toISO(dy);
+          if (!skip[key] && !done[key]) out.push({ key, date: toISO(dy), title: r.title, client: r.client, remind: r.remind || 0, amount: r.amount || 0 });
+        }
+      }
+    }
+  }
+  for (const o of (data.oneoffs || [])) {
+    if (o.done || !o.due) continue;
+    const dd = parseISO(o.due);
+    if (dd >= start && dd <= end) out.push({ key: o.id, date: o.due, title: o.title, client: o.client, remind: o.remind || 0, amount: o.amount || 0 });
+  }
+  return out;
+}
+
+async function sendPush(env, subscription, payload) {
+  if (!subscription || !env.VAPID_PRIVATE_KEY) return;
+  webpush.setVapidDetails('mailto:' + (env.REMINDER_EMAIL_TO || 'kandyphoenix@hotmail.com'), env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+  try { await webpush.sendNotification(subscription, JSON.stringify(payload)); }
+  catch (e) { console.log('push send failed', e.message); }
+}
+async function sendEmail(env, subject, html) {
+  if (!env.RESEND_API_KEY) return;
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: "Kandy's Planner <hello@phoenixmethodseo.com>",
+      to: [env.REMINDER_EMAIL_TO || 'kandyphoenix@hotmail.com'],
+      subject,
+      html,
+    }),
+  }).catch((e) => console.log('email send failed', e.message));
+}
+
+// ── Daily cron: due-today/overdue summary + N-day-ahead lead-time reminders ──
+async function runReminderCheck(env) {
+  const data = await getPlannerJson();
+  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+  const todayISO = toISO(today);
+  data.serverNotified = data.serverNotified || {};
+  let changed = false;
+
+  const dueToday = dueItemsInRange(data, todayISO, todayISO);
+  const overdueWindow = dueItemsInRange(data, toISO(new Date(today.getTime() - 30 * 86400000)), toISO(new Date(today.getTime() - 86400000)));
+  const summaryKey = 'summary|' + todayISO;
+  if ((dueToday.length || overdueWindow.length) && !data.serverNotified[summaryKey]) {
+    data.serverNotified[summaryKey] = true; changed = true;
+    const title = '📋 Planner — ' + todayISO;
+    const body = (dueToday.length ? dueToday.length + ' due today' : '') + (dueToday.length && overdueWindow.length ? ' · ' : '') + (overdueWindow.length ? overdueWindow.length + ' overdue' : '');
+    const listHtml = dueToday.map((i) => `<li><strong>${i.title}</strong> (${i.client}${i.amount ? ', $' + i.amount : ''})</li>`).join('');
+    await sendPush(env, data.pushSubscription, { title, body });
+    await sendEmail(env, title, `<p>${body}</p>${listHtml ? '<ul>' + listHtml + '</ul>' : ''}`);
+  }
+
+  const upcoming = dueItemsInRange(data, toISO(new Date(today.getTime() + 86400000)), toISO(new Date(today.getTime() + 60 * 86400000))).filter((i) => i.remind > 0);
+  for (const i of upcoming) {
+    const days = Math.round((parseISO(i.date) - today) / 86400000);
+    if (days > 0 && days <= i.remind) {
+      const leadKey = 'lead|' + i.key + '|' + todayISO;
+      if (!data.serverNotified[leadKey]) {
+        data.serverNotified[leadKey] = true; changed = true;
+        const title = `📅 In ${days} day${days > 1 ? 's' : ''}: ${i.title}`;
+        const body = `${i.client} · due ${i.date}${i.amount ? ' · $' + i.amount : ''}`;
+        await sendPush(env, data.pushSubscription, { title, body });
+        await sendEmail(env, title, `<p>${body}</p>`);
+      }
+    }
+  }
+
+  if (changed) await putPlannerJson(data);
+}
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -131,6 +258,22 @@ export default {
       return json({ error: 'unknown et endpoint' }, 404);
     }
 
+    // ── Push subscription storage (single device) + manual test trigger ──
+    if (url.pathname === '/push-subscribe' && req.method === 'POST') {
+      const sub = await req.json().catch(() => null);
+      if (!sub || !sub.endpoint) return json({ error: 'invalid subscription' }, 400);
+      const data = await getPlannerJson();
+      data.pushSubscription = sub;
+      await putPlannerJson(data);
+      return json({ ok: true });
+    }
+    if (url.pathname === '/push-test' && req.method === 'POST') {
+      const data = await getPlannerJson();
+      await sendPush(env, data.pushSubscription, { title: '🔔 Test reminder', body: "Push is wired up — you're good." });
+      await sendEmail(env, "Test reminder — Kandy's Planner", '<p>Push + email are wired up.</p>');
+      return json({ ok: true });
+    }
+
     // ── CORS relay for allow-listed feeds/quotes ──
     if (url.pathname === '/proxy') {
       const target = url.searchParams.get('url');
@@ -181,6 +324,10 @@ export default {
       return json({ ok: r.ok, refresh: tk.refresh_token || rt });
     }
 
-    return new Response("Kandy's Planner Worker (stateless). /health /proxy /ms/* /et/request /et/access /et/portfolio", { headers: { ...CORS, 'content-type': 'text/plain' } });
+    return new Response("Kandy's Planner Worker. /health /proxy /ms/* /et/request /et/access /et/portfolio /push-subscribe /push-test", { headers: { ...CORS, 'content-type': 'text/plain' } });
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runReminderCheck(env));
   },
 };

@@ -1,10 +1,25 @@
-// Self-destructing service worker: clears all caches, unregisters, reloads clients.
-self.addEventListener('install',function(){self.skipWaiting();});
-self.addEventListener('activate',function(e){
+// Service worker: minimal cache passthrough + web push notifications.
+self.addEventListener('install', function () { self.skipWaiting(); });
+self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
+
+self.addEventListener('push', function (e) {
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (err) {}
+  var title = data.title || "Kandy's Planner";
+  var body = data.body || '';
+  e.waitUntil(self.registration.showNotification(title, {
+    body: body,
+    icon: 'icon-192.png',
+    badge: 'icon-192.png',
+  }));
+});
+
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
   e.waitUntil(
-    caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));})
-    .then(function(){return self.registration.unregister();})
-    .then(function(){return self.clients.matchAll();})
-    .then(function(clients){clients.forEach(function(c){try{c.navigate(c.url);}catch(e){}});})
+    self.clients.matchAll({ type: 'window' }).then(function (list) {
+      for (var i = 0; i < list.length; i++) { if ('focus' in list[i]) return list[i].focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow('./');
+    })
   );
 });
