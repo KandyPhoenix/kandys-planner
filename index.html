@@ -1601,6 +1601,10 @@ function openSettings(){
   document.getElementById('setTodoist').value=(S.settings&&S.settings.todoistToken)||'';
   document.getElementById('todoStatus').textContent=(S.settings&&S.settings.todoistToken)?'Connected.':'';
   document.getElementById('setWorker').value=(S.settings&&S.settings.worker)||'';
+  (function(){
+    var accts=msAccts(),st=document.getElementById('msStatus');
+    if(st)st.textContent=accts.length?('✓ Connected: '+accts.map(function(a){return a.email||'(unnamed account)';}).join(', ')+' — click Connect to add another, or Disconnect to remove all.'):'';
+  })();
   document.getElementById('setLight').checked=!!S.settings.light;
   document.getElementById('setHeat').checked=S.settings.heatmap!==false;
   renderAccentRow();
