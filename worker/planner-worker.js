@@ -12,17 +12,83 @@ import { ApplicationServerKeys, generatePushHTTPRequest } from 'webpush-webcrypt
 const MS_CLIENT = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // public client
 const FIRESTORE_DOC_URL = 'https://firestore.googleapis.com/v1/projects/wellness-tracker-127/databases/(default)/documents/wellness/servicesPlanner';
 
+// ── Firestore auth ───────────────────────────────────────────────────
+// This worker used to read AND WRITE the planner doc anonymously, which only
+// worked because the Firestore rules were wide open — the same hole that let
+// anyone on the internet read Kandy's client names and invoice amounts. Once
+// those rules lock, anonymous access 403s and her reminders would die
+// silently (a cron failure is invisible).
+//
+// So it now authenticates with a service account. Firestore's REST API
+// authorises IAM identities directly, so an Owner/Editor token satisfies the
+// locked rules without needing a Firebase Auth user.
+//
+// FIREBASE_SA_JSON is a wrangler secret (the service-account key JSON), never
+// in the repo. If it's absent the calls fall back to anonymous, which keeps
+// this working while the rules are still open.
+let _tokCache = { token: null, exp: 0 };
+
+function b64url(buf) {
+  const bin = String.fromCharCode(...new Uint8Array(buf));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function pemToArrayBuffer(pem) {
+  const b64 = pem.replace(/-----(BEGIN|END) PRIVATE KEY-----/g, '').replace(/\s+/g, '');
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+async function firestoreToken(env) {
+  if (!env || !env.FIREBASE_SA_JSON) return null;          // rules still open
+  const now = Math.floor(Date.now() / 1000);
+  if (_tokCache.token && _tokCache.exp > now + 120) return _tokCache.token;
+
+  const sa = JSON.parse(env.FIREBASE_SA_JSON);
+  const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
+  const claim = b64url(new TextEncoder().encode(JSON.stringify({
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/datastore',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600, iat: now,
+  })));
+  const key = await crypto.subtle.importKey(
+    'pkcs8', pemToArrayBuffer(sa.private_key),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(`${header}.${claim}`));
+  const jwt = `${header}.${claim}.${b64url(sig)}`;
+
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt,
+    }),
+  });
+  if (!r.ok) return null;
+  const t = await r.json();
+  _tokCache = { token: t.access_token, exp: now + (t.expires_in || 3600) };
+  return _tokCache.token;
+}
+async function firestoreHeaders(env, extra) {
+  const h = Object.assign({}, extra || {});
+  const t = await firestoreToken(env);
+  if (t) h['Authorization'] = 'Bearer ' + t;
+  return h;
+}
+
 // ── Firestore read/modify/write of the single `json` string field ──
-async function getPlannerJson() {
-  const r = await fetch(FIRESTORE_DOC_URL);
+async function getPlannerJson(env) {
+  const r = await fetch(FIRESTORE_DOC_URL, { headers: await firestoreHeaders(env) });
   const doc = await r.json();
   return JSON.parse(doc.fields.json.stringValue);
 }
-async function putPlannerJson(data) {
+async function putPlannerJson(data, env) {
   const body = { fields: { json: { stringValue: JSON.stringify(data) } } };
   await fetch(FIRESTORE_DOC_URL + '?updateMask.fieldPaths=json', {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await firestoreHeaders(env, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
 }
@@ -111,7 +177,7 @@ async function sendEmail(env, subject, html) {
 
 // ── Daily cron: due-today/overdue summary + N-day-ahead lead-time reminders ──
 async function runReminderCheck(env) {
-  const data = await getPlannerJson();
+  const data = await getPlannerJson(env);
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   const todayISO = toISO(today);
   data.serverNotified = data.serverNotified || {};
@@ -144,7 +210,7 @@ async function runReminderCheck(env) {
     }
   }
 
-  if (changed) await putPlannerJson(data);
+  if (changed) await putPlannerJson(data, env);
 }
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -274,13 +340,13 @@ export default {
     if (url.pathname === '/push-subscribe' && req.method === 'POST') {
       const sub = await req.json().catch(() => null);
       if (!sub || !sub.endpoint) return json({ error: 'invalid subscription' }, 400);
-      const data = await getPlannerJson();
+      const data = await getPlannerJson(env);
       data.pushSubscription = sub;
-      await putPlannerJson(data);
+      await putPlannerJson(data, env);
       return json({ ok: true });
     }
     if (url.pathname === '/push-test' && req.method === 'POST') {
-      const data = await getPlannerJson();
+      const data = await getPlannerJson(env);
       await sendPush(env, data.pushSubscription, { title: '🔔 Test reminder', body: "Push is wired up — you're good." });
       await sendEmail(env, "Test reminder — Kandy's Planner", '<p>Push + email are wired up.</p>');
       return json({ ok: true });
