@@ -56,11 +56,12 @@
   body.boardmode{overflow:hidden;padding-bottom:0}
   .board{display:none;overflow:auto;position:relative}
   .bcanvas{position:relative;min-width:100%}
-  .widget{position:absolute;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.35)}
-  .widget.dragging{opacity:.9;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+  .widget{position:absolute;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.35);
+    transition:left .18s cubic-bezier(.2,.7,.3,1),top .18s cubic-bezier(.2,.7,.3,1),height .12s ease}
+  .widget.dragging{opacity:.92;box-shadow:0 12px 34px rgba(0,0,0,.6);transition:none;cursor:grabbing}
   .wtitle{padding:11px 14px;font-weight:800;font-size:14px;border-bottom:1px solid var(--line);flex:0 0 auto;cursor:move;user-select:none;touch-action:none}
   .grip{color:var(--muted);font-size:12px;margin-right:3px}
-  .wresize{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:nwse-resize;z-index:3;touch-action:none;
+  .wresize{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:ns-resize;z-index:3;touch-action:none;
     background:linear-gradient(135deg,transparent 50%,var(--muted) 50%,var(--muted) 62%,transparent 62%,transparent 74%,var(--muted) 74%,var(--muted) 86%,transparent 86%)}
   .wresize:hover{filter:brightness(1.8)}
   .wbody{flex:1 1 auto;overflow-y:auto;padding:6px 12px;min-height:0}
@@ -385,7 +386,7 @@
     ☀️ Light mode</label>
 
   <label style="margin-top:18px">🧩 Board layout</label>
-  <div class="hint" style="text-align:left;margin:0 0 6px">Drag a card's title to reorder; drag its right edge to resize. Your layout is saved.</div>
+  <div class="hint" style="text-align:left;margin:0 0 6px">Cards snap together automatically — no gaps, nothing hidden. Drag a card's title to reorder; drag its bottom-right to resize height. Your layout is saved.</div>
   <button class="ghost" style="position:static;width:100%" onclick="resetBoard()">↺ Reset board layout</button>
 
   <label style="margin-top:18px">🔥 Workload heatmap</label>
@@ -524,7 +525,7 @@ function ensureShape(o){
   o.paid=o.paid||{};o.goals=o.goals||[];o.habits=o.habits||[];o.habitlog=o.habitlog||{};
   if(o.settings.heatmap===undefined)o.settings.heatmap=true;
   o.settings.accent=o.settings.accent||'#ff1c8d';
-  o.settings.board=o.settings.board||{};o.settings.board.pos=o.settings.board.pos||{};
+  o.settings.board=o.settings.board||{};o.settings.board.h=o.settings.board.h||{};
   o.notes=o.notes||{};o.countdowns=o.countdowns||[];o.templates=o.templates||[];o.top3=o.top3||{};
   if(o.settings.sticky===undefined)o.settings.sticky='';
   if(o.settings.wxLat===undefined){o.settings.wxLat=30.16;o.settings.wxLon=-95.46;o.settings.wxName='The Woodlands';} // weather location
@@ -1335,39 +1336,131 @@ function boardWidgets(){
   W.push({id:'sticky',title:'📌 Sticky note',body:stickyBody()});
   return W;
 }
+// ── Board layout: masonry pack ───────────────────────────────────────
+// Cards flow into fixed-width columns, each placed in the currently-shortest
+// column. Positions are COMPUTED, never free — so there are no gaps and it's
+// structurally impossible for a card to hide behind another. Drag reorders;
+// height is resizable. Old free {x,y,w,h} layouts migrate to an order once.
+var COLW=320,GAP=14,DEFH=300;
+function boardOrder(){
+  if(!S.settings.board)S.settings.board={};
+  var b=S.settings.board;
+  var ids=boardWidgets().map(function(w){return w.id;});
+  // one-time migration from the old free-position layout
+  if(!b.order&&b.pos){
+    b.order=Object.keys(b.pos).sort(function(a,c){
+      var pa=b.pos[a],pc=b.pos[c];
+      return (pa.y-pc.y)||(pa.x-pc.x);
+    });
+    b.h=b.h||{};
+    Object.keys(b.pos).forEach(function(id){if(b.pos[id]&&b.pos[id].h)b.h[id]=b.pos[id].h;});
+    delete b.pos;
+  }
+  b.order=b.order||[];
+  var out=b.order.filter(function(id){return ids.indexOf(id)>-1;});
+  ids.forEach(function(id){if(out.indexOf(id)<0)out.push(id);});
+  b.order=out;
+  return out;
+}
 function renderBoard(){
   sizeBoard();
-  if(!S.settings.board)S.settings.board={};if(!S.settings.board.pos)S.settings.board.pos={};
-  var pos=S.settings.board.pos,board=document.getElementById('board');
-  var cw=board.clientWidth||1000,COLW=320,GAP=12,cols=Math.max(1,Math.floor((cw-GAP)/(COLW+GAP))),changed=false;
-  var html=boardWidgets().map(function(w,idx){
-    var p=pos[w.id];
-    if(!p){var col=idx%cols,row=Math.floor(idx/cols);p={x:GAP+col*(COLW+GAP),y:GAP+row*312,w:COLW,h:300};pos[w.id]=p;changed=true;}
-    return '<div class="widget" data-wid="'+w.id+'" style="left:'+p.x+'px;top:'+p.y+'px;width:'+p.w+'px;height:'+p.h+'px">'+
-      '<div class="wtitle" onpointerdown="boardMoveStart(event,\''+w.id+'\')" title="Drag to move"><span class="grip">⠿</span> '+w.title+'</div>'+
+  if(!S.settings.board)S.settings.board={};
+  var board=document.getElementById('board');
+  var order=boardOrder();
+  var wmap={};boardWidgets().forEach(function(w){wmap[w.id]=w;});
+  var html=order.map(function(id){
+    var w=wmap[id];if(!w)return '';
+    return '<div class="widget" data-wid="'+w.id+'" style="width:'+COLW+'px">'+
+      '<div class="wtitle" onpointerdown="boardMoveStart(event,\''+w.id+'\')" title="Drag to reorder"><span class="grip">⠿</span> '+w.title+'</div>'+
       '<div class="wbody">'+w.body+'</div>'+(w.footer||'')+
-      '<div class="wresize" onpointerdown="boardResizeStart(event,\''+w.id+'\')" title="Drag to resize"></div>'+
+      '<div class="wresize" onpointerdown="boardResizeStart(event,\''+w.id+'\')" title="Drag to resize height"></div>'+
     '</div>';
   }).join('');
   board.innerHTML='<div class="bcanvas" id="bcanvas">'+html+'</div>';
-  if(changed)save();
-  sizeCanvas();
+  packBoard();
 }
-function sizeCanvas(){var c=document.getElementById('bcanvas');if(!c)return;var mr=600,mb=300;
-  [].forEach.call(c.querySelectorAll('.widget'),function(el){mr=Math.max(mr,el.offsetLeft+el.offsetWidth+40);mb=Math.max(mb,el.offsetTop+el.offsetHeight+40);});
-  c.style.width=mr+'px';c.style.height=mb+'px';}
-function savePos(id){var el=document.querySelector('[data-wid="'+id+'"]');if(!el)return;
-  if(!S.settings.board)S.settings.board={};if(!S.settings.board.pos)S.settings.board.pos={};
-  S.settings.board.pos[id]={x:Math.round(el.offsetLeft),y:Math.round(el.offsetTop),w:Math.round(el.offsetWidth),h:Math.round(el.offsetHeight)};save();}
+// Masonry: place each card (in order) into the shortest column. skipId keeps
+// one card where it is (the one being dragged, which follows the pointer).
+function packBoard(skipId){
+  var canvas=document.getElementById('bcanvas');if(!canvas)return;
+  var board=document.getElementById('board');
+  var cw=board.clientWidth||1000;
+  var cols=Math.max(1,Math.floor((cw-GAP)/(COLW+GAP)));
+  var totalW=cols*COLW+(cols-1)*GAP;
+  var x0=Math.max(GAP,Math.floor((cw-totalW)/2));   // center the columns
+  var colH=[];for(var i=0;i<cols;i++)colH.push(GAP);
+  var hmap=(S.settings.board&&S.settings.board.h)||{};
+  boardOrder().forEach(function(id){
+    var el=canvas.querySelector('[data-wid="'+id+'"]');if(!el)return;
+    var h=hmap[id]||DEFH;
+    var c=0;for(var k=1;k<cols;k++){if(colH[k]<colH[c])c=k;}
+    var x=x0+c*(COLW+GAP),y=colH[c];
+    el.style.width=COLW+'px';el.style.height=h+'px';
+    if(id!==skipId){el.style.left=x+'px';el.style.top=y+'px';}
+    colH[c]+=h+GAP;
+  });
+  var maxH=GAP;colH.forEach(function(v){if(v>maxH)maxH=v;});
+  canvas.style.width=cw+'px';canvas.style.height=maxH+'px';
+}
 var mv=null;
-function boardMoveStart(e,id){if(e.button)return;e.preventDefault();var el=e.target.closest('.widget');mv={el:el,id:id,sx:e.clientX,sy:e.clientY,ox:el.offsetLeft,oy:el.offsetTop};el.style.zIndex=20;el.classList.add('dragging');try{e.target.setPointerCapture(e.pointerId);}catch(_){}document.addEventListener('pointermove',boardMoveMove);document.addEventListener('pointerup',boardMoveEnd);}
-function boardMoveMove(e){if(!mv)return;mv.el.style.left=Math.max(0,mv.ox+(e.clientX-mv.sx))+'px';mv.el.style.top=Math.max(0,mv.oy+(e.clientY-mv.sy))+'px';}
-function boardMoveEnd(){if(!mv)return;document.removeEventListener('pointermove',boardMoveMove);document.removeEventListener('pointerup',boardMoveEnd);mv.el.style.zIndex='';mv.el.classList.remove('dragging');savePos(mv.id);sizeCanvas();mv=null;}
+function boardMoveStart(e,id){
+  if(e.button)return;e.preventDefault();
+  var el=e.target.closest('.widget'),canvas=document.getElementById('bcanvas');
+  var r=el.getBoundingClientRect();
+  mv={el:el,id:id,canvas:canvas,offx:e.clientX-r.left,offy:e.clientY-r.top};
+  el.classList.add('dragging');el.style.zIndex=50;el.style.pointerEvents='none';
+  try{e.target.setPointerCapture(e.pointerId);}catch(_){}
+  document.addEventListener('pointermove',boardMoveMove);
+  document.addEventListener('pointerup',boardMoveEnd);
+}
+function boardMoveMove(e){
+  if(!mv)return;
+  var cr=mv.canvas.getBoundingClientRect();
+  mv.el.style.left=(e.clientX-cr.left-mv.offx)+'px';
+  mv.el.style.top=(e.clientY-cr.top-mv.offy)+'px';
+  // reorder: whichever card the pointer is over becomes the drop target
+  var under=document.elementFromPoint(e.clientX,e.clientY);
+  var tgt=under&&under.closest?under.closest('.widget'):null;
+  if(tgt&&tgt!==mv.el){
+    var order=boardOrder();
+    var from=order.indexOf(mv.id),to=order.indexOf(tgt.getAttribute('data-wid'));
+    if(from>-1&&to>-1&&from!==to){
+      order.splice(from,1);order.splice(to,0,mv.id);
+      S.settings.board.order=order;
+      packBoard(mv.id);   // reflow the others, leaving a slot for the dragged card
+    }
+  }
+}
+function boardMoveEnd(){
+  if(!mv)return;
+  document.removeEventListener('pointermove',boardMoveMove);
+  document.removeEventListener('pointerup',boardMoveEnd);
+  mv.el.classList.remove('dragging');mv.el.style.zIndex='';mv.el.style.pointerEvents='';
+  packBoard();save();mv=null;   // dragged card snaps into its slot
+}
 var rz=null;
-function boardResizeStart(e,id){e.preventDefault();e.stopPropagation();var el=e.target.closest('.widget');rz={el:el,id:id,sx:e.clientX,sy:e.clientY,sw:el.offsetWidth,sh:el.offsetHeight};try{e.target.setPointerCapture(e.pointerId);}catch(_){}document.addEventListener('pointermove',boardResizeMove);document.addEventListener('pointerup',boardResizeEnd);}
-function boardResizeMove(e){if(!rz)return;rz.el.style.width=Math.max(200,Math.min(1000,rz.sw+(e.clientX-rz.sx)))+'px';rz.el.style.height=Math.max(110,Math.min(1400,rz.sh+(e.clientY-rz.sy)))+'px';}
-function boardResizeEnd(){if(!rz)return;document.removeEventListener('pointermove',boardResizeMove);document.removeEventListener('pointerup',boardResizeEnd);savePos(rz.id);sizeCanvas();rz=null;}
-function resetBoard(){S.settings.board={pos:{}};save();if(boardMode)renderBoard();alert('Board layout reset.');}
+function boardResizeStart(e,id){
+  e.preventDefault();e.stopPropagation();
+  var el=e.target.closest('.widget');
+  rz={el:el,id:id,sy:e.clientY,sh:el.offsetHeight};
+  try{e.target.setPointerCapture(e.pointerId);}catch(_){}
+  document.addEventListener('pointermove',boardResizeMove);
+  document.addEventListener('pointerup',boardResizeEnd);
+}
+function boardResizeMove(e){
+  if(!rz)return;
+  var h=Math.max(120,Math.min(1400,rz.sh+(e.clientY-rz.sy)));
+  rz.el.style.height=h+'px';
+  if(!S.settings.board.h)S.settings.board.h={};
+  S.settings.board.h[rz.id]=Math.round(h);   // repack on release, not mid-drag
+}
+function boardResizeEnd(){
+  if(!rz)return;
+  document.removeEventListener('pointermove',boardResizeMove);
+  document.removeEventListener('pointerup',boardResizeEnd);
+  packBoard();save();rz=null;
+}
+function resetBoard(){S.settings.board={order:[],h:{}};save();if(boardMode)renderBoard();alert('Board layout reset — cards re-packed.');}
 function bAddToday(){var e=document.getElementById('bqadd'),v=e?e.value.trim():'';if(!v)return;var sp=sf!=='All'?sf:'Life';S.oneoffs.push({id:'o'+Date.now(),title:v,space:sp,client:(cf!=='All'?cf:(sp==='Life'?'Personal':sp)),type:sp==='Life'?'Personal':'Other',due:iso(todayMid()),done:false});save();renderBoard();}
 function bListAdd(lid){var e=document.getElementById('bl_'+lid),v=e?e.value.trim():'';if(!v)return;var l=S.lists.filter(function(x){return x.id===lid;})[0];if(!l)return;var it={id:'i'+Date.now(),text:v};if(l.type==='checklist'||l.type==='buy')it.done=false;l.items.unshift(it);save();renderBoard();}
 function bListToggle(lid,i){var l=S.lists.filter(function(x){return x.id===lid;})[0];if(l&&l.items[i]){l.items[i].done=!l.items[i].done;save();renderBoard();}}
@@ -1376,7 +1469,7 @@ function bHabit(id){var k=id+'|'+iso(todayMid()),on=!S.habitlog[k];if(on)S.habit
 function bGoalDone(idx){var g=S.goals[idx],was=g.done;g.done=!g.done;save();renderBoard();if(g.done&&!was){toast('🎯 '+g.text);celebrate();}}
 function bHabitAdd(inp){var v=inp.value.trim();if(!v)return;S.habits.push({id:'h'+Date.now(),emoji:'',name:v});inp.value='';save();renderBoard();}
 function bGoalAdd(inp){var v=inp.value.trim();if(!v)return;S.goals.push({id:'g'+Date.now(),text:v,month:curMonthKey(),target:0,progress:0,done:false});inp.value='';save();renderBoard();}
-window.addEventListener('resize',function(){if(boardMode)sizeBoard();});
+window.addEventListener('resize',function(){if(boardMode){sizeBoard();packBoard();}});
 
 // ---- Money dashboard ----
 function mcard(label,val,cls){return '<div class="mcard '+cls+'"><div class="mcard-v">'+val+'</div><div class="mcard-l">'+label+'</div></div>';}
