@@ -11,7 +11,6 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Kandy's Planner</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
   :root{
@@ -1801,97 +1800,17 @@ setTimeout(fetchWellness,3600);
 setInterval(fetchWellness,300000);
 
 // ---- Firebase cloud sync (Firestore, same project as Wellness Tracker) ----
-//
-// Sign-in gate. This planner's data (client names, invoice amounts) used to
-// be readable AND writable by anyone on the internet: the page is public, it
-// carries the project id, and the Firestore rules allowed anonymous access.
-// Signing in is what lets the rules lock the data to Kandy alone.
-//
-// Passwordless email-link, because kandyphoenix@hotmail.com is a Microsoft
-// address - the Google provider can't issue a token for it. No password is
-// ever typed here.
-//
-// The app still works fully offline from localStorage; if sign-in is skipped
-// it degrades to local-only and says so, loudly, rather than pretending to
-// be synced.
-var OWNER_EMAIL='kandyphoenix@hotmail.com';
-var authReady=false;
-
-function signInBanner(msg,showBtn){
-  var el=document.getElementById('authBar');
-  if(!el){
-    el=document.createElement('div');
-    el.id='authBar';
-    el.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9999;'+
-      'background:#2a1206;border-top:2px solid #ff6a1a;color:#ffd9b8;'+
-      'padding:10px 14px;font-size:13px;display:flex;gap:12px;align-items:center;'+
-      'justify-content:center;flex-wrap:wrap;box-shadow:0 -6px 20px rgba(0,0,0,.5)';
-    document.body.appendChild(el);
-  }
-  el.innerHTML='<span>'+msg+'</span>';
-  if(showBtn){
-    var b=document.createElement('button');
-    b.textContent='Email me a sign-in link';
-    b.style.cssText='background:linear-gradient(90deg,#ff6a1a,#f2b134);color:#140b04;'+
-      'border:none;border-radius:7px;padding:7px 13px;font-weight:700;cursor:pointer';
-    b.onclick=function(){
-      b.disabled=true;b.textContent='Sending…';
-      firebase.auth().sendSignInLinkToEmail(OWNER_EMAIL,{url:location.href.split('?')[0],handleCodeInApp:true})
-        .then(function(){localStorage.setItem('planner_signin_email',OWNER_EMAIL);
-          signInBanner('Check '+OWNER_EMAIL+' and tap the link on this device.',false);})
-        .catch(function(e){b.disabled=false;b.textContent='Email me a sign-in link';
-          signInBanner('Sign-in failed: '+(e.code||e.message),true);});
-    };
-    el.appendChild(b);
-  }
-}
-function clearBanner(){var el=document.getElementById('authBar');if(el)el.remove();}
-
 (function(){
   try{
     firebase.initializeApp({apiKey:"AIzaSyAxqkJiZL94gR3W5TBPTRNE5AdLyCDwb2g",authDomain:"wellness-tracker-127.firebaseapp.com",projectId:"wellness-tracker-127",storageBucket:"wellness-tracker-127.firebasestorage.app",messagingSenderId:"769681534889",appId:"1:769681534889:web:a273b28653892af4039eb8"});
     var db=firebase.firestore();
-    var auth=firebase.auth();
-
-    // Completing sign-in when Kandy taps the emailed link.
-    if(auth.isSignInWithEmailLink(location.href)){
-      var em=localStorage.getItem('planner_signin_email')||OWNER_EMAIL;
-      auth.signInWithEmailLink(em,location.href).then(function(){
-        localStorage.removeItem('planner_signin_email');
-        history.replaceState({},'',location.pathname);
-      }).catch(function(e){signInBanner('Sign-in link failed: '+(e.code||e.message),true);});
-    }
-
-    function startSync(){
-      docRef=db.collection('wellness').doc('servicesPlanner');
-      docRef.get().then(function(doc){
-        cloudReady=true;
-        if(doc.exists&&doc.data().json){try{S=ensureShape(JSON.parse(doc.data().json));localStorage.setItem(KEY,JSON.stringify(S));render();}catch(e){}setSync('☁ Synced');}
-        else{cloudSave();}
-        docRef.onSnapshot(function(snap){if(snap.exists&&snap.data().json){try{S=ensureShape(JSON.parse(snap.data().json));localStorage.setItem(KEY,JSON.stringify(S));render();setSync('☁ Synced');}catch(e){}}},function(){setSync('⚠ offline (local)');});
-      }).catch(function(e){
-        // permission-denied here means "signed out", not "network down".
-        if(e&&e.code==='permission-denied'){
-          setSync('⚠ not signed in');
-          signInBanner('Your planner is <b>not syncing</b> — changes stay on this device only.',true);
-        } else setSync('⚠ offline (local)');
-      });
-    }
-
-    auth.onAuthStateChanged(function(user){
-      authReady=true;
-      if(user){clearBanner();startSync();}
-      else{
-        // Deliberately still sync while signed out: the rules are open until
-        // the lock lands, so this changes nothing today and the planner keeps
-        // working exactly as before. The banner states the true situation -
-        // "public", not "not syncing" (it IS syncing right now). Once the
-        // rules lock, startSync's permission-denied branch takes over and
-        // says the accurate thing then.
-        signInBanner('This planner is <b>readable by anyone</b> until you sign in.',true);
-        startSync();
-      }
-    });
+    docRef=db.collection('wellness').doc('servicesPlanner');
+    docRef.get().then(function(doc){
+      cloudReady=true;
+      if(doc.exists&&doc.data().json){try{S=ensureShape(JSON.parse(doc.data().json));localStorage.setItem(KEY,JSON.stringify(S));render();}catch(e){}setSync('☁ Synced');}
+      else{cloudSave();}
+      docRef.onSnapshot(function(snap){if(snap.exists&&snap.data().json){try{S=ensureShape(JSON.parse(snap.data().json));localStorage.setItem(KEY,JSON.stringify(S));render();setSync('☁ Synced');}catch(e){}}},function(){setSync('⚠ offline (local)');});
+    }).catch(function(){setSync('⚠ offline (local)');});
   }catch(e){setSync('⚠ offline (local)');}
 })();
 
