@@ -468,6 +468,7 @@ var SPACE_META={PM:{e:'🚀'},PHW:{e:'🏥'},Life:{e:'🌱'},Todoist:{e:'✅'},M
 var EXTERNAL_SPACES=['Todoist','MsTodo'];
 function spaceLabel(s){return s==='All'?'All':((SPACE_META[s]?SPACE_META[s].e+' ':'')+s);}
 function inferSpace(it){
+  if(/^PHW-\d+:/.test(it.title||''))return 'PM';
   if((it.client||'')==='Personal'||['Birthday','Personal','Appointment','Bill','Health','Errand'].indexOf(it.type)>=0)return 'Life';
   if(/phw|billing/i.test(it.client||''))return 'PHW';
   return 'PM';
@@ -638,7 +639,7 @@ function itemsIn(start,end){
 }
 function fil(items){
   if(EXTERNAL_SPACES.indexOf(sf)>=0)return items.filter(function(i){return i.space===sf;});
-  var out=items.filter(function(i){return EXTERNAL_SPACES.indexOf(i.space)<0;});
+  var out=items;
   if(sf!=='All')out=out.filter(function(i){return (i.space||'PM')===sf;});
   if(cf!=='All')out=out.filter(function(i){return i.client===cf;});
   return out;}
