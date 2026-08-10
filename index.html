@@ -1724,7 +1724,7 @@ function saveWorker(){
 }
 function fetchTodoist(cb){
   var tok=S.settings&&S.settings.todoistToken;if(!tok){cb&&cb(false,0,'No token');return;}
-  fetch('https://api.todoist.com/api/v1/tasks/filter?query='+encodeURIComponent('today | overdue'),{headers:{Authorization:'Bearer '+tok}})
+  fetch('https://api.todoist.com/api/v1/tasks/filter?query='+encodeURIComponent('overdue | due before: +60 days'),{headers:{Authorization:'Bearer '+tok}})
     .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
     .then(function(d){todoistTasks=(d&&d.results)?d.results:(Array.isArray(d)?d:[]);cb&&cb(true,todoistTasks.length);refreshOpen();})
     .catch(function(e){todoistTasks=[];cb&&cb(false,0,(''+e).indexOf('Failed to fetch')>=0?'Browser blocked (network).':e.message);});
