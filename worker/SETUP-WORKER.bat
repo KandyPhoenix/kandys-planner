@@ -39,3 +39,11 @@ echo   and reminders are unaffected.
 :end
 echo.
 pause
+
+REM ---------------------------------------------------------------------------
+REM Android widget key (added 2026-09-29). The widget reads the planner through
+REM this Worker's /widget route, gated by the WIDGET_KEY secret. Set it once:
+REM     npx wrangler secret put WIDGET_KEY --config wrangler.toml
+REM (paste the key when prompted), then deploy as above. Enter the same key in
+REM the widget app on the phone.
+REM ---------------------------------------------------------------------------
