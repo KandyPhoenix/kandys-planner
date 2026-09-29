@@ -340,7 +340,7 @@
   <div class="hint" style="text-align:left;margin:6px 0 0" id="pushStatus"></div>
 
   <label style="margin-top:18px">🔗 Todoist (optional)</label>
-  <div class="hint" style="text-align:left;margin:0 0 6px">Paste your Todoist API token — your <b>today + overdue</b> tasks show as their own <b>✅ Todoist</b> filter/calendar. Tap ✓ on one to complete it in Todoist. Stored only in your browser + private sync, never in the public site.</div>
+  <div class="hint" style="text-align:left;margin:0 0 6px">Paste your Todoist API token — your <b>today + overdue</b> tasks show as their own <b>✅ Todoist</b> filter/calendar. Tap ✓ on one to complete it in Todoist. Stored only on this device — never synced to the cloud — so paste it once on each device you use.</div>
   <input id="setTodoist" type="password" placeholder="Todoist API token" autocomplete="off">
   <div style="display:flex;gap:8px;margin-top:8px">
     <button class="ghost" style="position:static;flex:1" onclick="saveTodoist()">Save &amp; test</button>
@@ -449,7 +449,13 @@
 
 <script>
 var KEY='services_planner_v1';
-var BUILD='2026-09-28-1'; // bump on every deploy so the update banner can detect a newer version
+// Todoist API token lives ONLY on this device (TOKEN_KEY). It is never written into the synced Firestore doc,
+// which anyone with the project id could read while the rules were open (found 2026-09-28).
+var TOKEN_KEY='services_planner_todoist';
+function localToken(){try{return localStorage.getItem(TOKEN_KEY)||'';}catch(e){return '';}}
+function setLocalToken(t){try{if(t)localStorage.setItem(TOKEN_KEY,t);else localStorage.removeItem(TOKEN_KEY);}catch(e){}}
+function stateJSON(){return JSON.stringify(S,function(k,v){return k==='todoistToken'?undefined:v;});} // never persist/sync the token
+var BUILD='2026-09-29-1'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
@@ -519,10 +525,10 @@ var DEFAULT={rules:[
  {id:'jun-seo',client:'Lori',type:'Invoice',title:'SEO package invoice',due:'2026-06-01',amount:575,done:true}
 ],done:{},skip:{},subs:{}};
 function load(){try{var r=JSON.parse(localStorage.getItem(KEY));if(r&&r.rules){if(!r.skip)r.skip={};if(!r.done)r.done={};if(!r.subs)r.subs={};return r;}}catch(e){}return JSON.parse(JSON.stringify(DEFAULT));}
-function save(){localStorage.setItem(KEY,JSON.stringify(S));cloudSave();}
+function save(){localStorage.setItem(KEY,stateJSON());cloudSave();}
 var docRef=null,cloudReady=false;
 function setSync(t){var b=document.getElementById('syncBadge');if(b)b.textContent=t;}
-function cloudSave(){if(docRef)docRef.set({json:JSON.stringify(S),updated:Date.now()}).then(function(){setSync('☁ Synced');}).catch(function(){setSync('⚠ saved on this device');});}
+function cloudSave(){if(docRef)docRef.set({json:stateJSON(),updated:Date.now()}).then(function(){setSync('☁ Synced');}).catch(function(){setSync('⚠ saved on this device');});}
 function ensureShape(o){
   o.rules=o.rules||[];o.oneoffs=o.oneoffs||[];o.done=o.done||{};o.skip=o.skip||{};o.subs=o.subs||{};o.settings=o.settings||{};
   o.paid=o.paid||{};o.goals=o.goals||[];o.habits=o.habits||[];o.habitlog=o.habitlog||{};
@@ -534,6 +540,8 @@ function ensureShape(o){
   if(o.settings.wxLat===undefined){o.settings.wxLat=30.16;o.settings.wxLon=-95.46;o.settings.wxName='The Woodlands';} // weather location
   o.settings.newsFeeds=o.settings.newsFeeds||['World','US','Houston','Business'];
   o.settings.stocks=o.settings.stocks||[];
+  if(o.settings.todoistToken&&!localToken())setLocalToken(o.settings.todoistToken); // one-time migration from synced data
+  o.settings.todoistToken=localToken();
   if(!o.seededExtras){
     o.templates.push(
       {id:'onboard',name:'🚀 New client onboarding',space:'PM',tasks:[{title:'Kickoff call',type:'Appointment',off:0},{title:'Run audit',type:'SEO',off:1},{title:'Set up tools & access',type:'One-time',off:2},{title:'Build content plan',type:'Report',off:3},{title:'Create client portal',type:'Portal',off:4},{title:'Send welcome + first invoice',type:'Invoice',off:5}]},
@@ -1711,12 +1719,12 @@ function openSettings(){
 var todoistTasks=[];
 function saveTodoist(){
   var tok=document.getElementById('setTodoist').value.trim();
-  S.settings.todoistToken=tok;save();
+  S.settings.todoistToken=tok;setLocalToken(tok);save();
   document.getElementById('todoStatus').textContent='Testing…';
   if(!tok){document.getElementById('todoStatus').textContent='Disconnected.';render();return;}
   fetchTodoist(function(ok,n,err){document.getElementById('todoStatus').textContent=ok?('✓ Connected — '+n+' task(s). Tap the ✅ Todoist filter to see them.'):('⚠ '+(err||'Could not connect. Check the token.'));});
 }
-function clearTodoist(){S.settings.todoistToken='';save();document.getElementById('setTodoist').value='';todoistTasks=[];if(sf==='Todoist')sf='All';document.getElementById('todoStatus').textContent='Disconnected.';render();}
+function clearTodoist(){S.settings.todoistToken='';setLocalToken('');save();document.getElementById('setTodoist').value='';todoistTasks=[];if(sf==='Todoist')sf='All';document.getElementById('todoStatus').textContent='Disconnected.';render();}
 function saveWorker(){
   var w=document.getElementById('setWorker').value.trim().replace(/\/+$/,'');S.settings.worker=w;save();
   var st=document.getElementById('workerStatus');
@@ -1903,9 +1911,9 @@ setInterval(fetchWellness,300000);
     docRef=db.collection('wellness').doc('servicesPlanner');
     docRef.get().then(function(doc){
       cloudReady=true;
-      if(doc.exists&&doc.data().json){try{S=ensureShape(JSON.parse(doc.data().json));localStorage.setItem(KEY,JSON.stringify(S));render();}catch(e){}setSync('☁ Synced');}
+      if(doc.exists&&doc.data().json){try{S=ensureShape(JSON.parse(doc.data().json));localStorage.setItem(KEY,stateJSON());render();}catch(e){}setSync('☁ Synced');}
       else{cloudSave();}
-      docRef.onSnapshot(function(snap){if(snap.exists&&snap.data().json){try{S=ensureShape(JSON.parse(snap.data().json));localStorage.setItem(KEY,JSON.stringify(S));render();setSync('☁ Synced');}catch(e){}}},function(){setSync('⚠ offline (local)');});
+      docRef.onSnapshot(function(snap){if(snap.exists&&snap.data().json){try{S=ensureShape(JSON.parse(snap.data().json));localStorage.setItem(KEY,stateJSON());render();setSync('☁ Synced');}catch(e){}}},function(){setSync('⚠ offline (local)');});
     }).catch(function(){setSync('⚠ offline (local)');});
   }catch(e){setSync('⚠ offline (local)');}
 })();
