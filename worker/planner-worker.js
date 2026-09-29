@@ -215,7 +215,7 @@ async function runReminderCheck(env) {
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-MS-Refresh,X-ET-Token,X-ET-Secret',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-MS-Refresh,X-ET-Token,X-ET-Secret,X-Widget-Key',
 };
 const ALLOW = ['news.google.com', 'finance.yahoo.com'];
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, 'content-type': 'application/json' } });
@@ -274,6 +274,22 @@ export default {
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/health') return new Response('ok', { headers: { ...CORS, 'content-type': 'text/plain' } });
+
+    // ── Android home-screen widget: a read-only copy of the planner doc. ──
+    //    The Firestore rules are locked (2026-09-29), so the widget can no longer read the
+    //    doc itself; this Worker reads it with the service account and hands it over. The
+    //    Worker is public, so the route is gated by WIDGET_KEY (wrangler secret), which the
+    //    widget app stores once on the phone and sends as X-Widget-Key.
+    if (url.pathname === '/widget') {
+      if (!env.WIDGET_KEY) return json({ error: 'WIDGET_KEY is not configured on the Worker' }, 503);
+      const key = req.headers.get('X-Widget-Key') || '';
+      if (!key || key !== env.WIDGET_KEY) return json({ error: 'forbidden' }, 403);
+      const r = await fetch(FIRESTORE_DOC_URL, { headers: await firestoreHeaders(env) });
+      return new Response(await r.text(), {
+        status: r.status,
+        headers: { ...CORS, 'content-type': 'application/json', 'cache-control': 'no-store' },
+      });
+    }
 
     // ── E*TRADE (OAuth 1.0a). Consumer key/secret = Worker secrets; the user's
     //    access token/secret come from the browser per request (nothing stored). ──
@@ -449,7 +465,7 @@ export default {
       return json({ ok: r.ok, refresh: tk.refresh_token || rt });
     }
 
-    return new Response("Kandy's Planner Worker. /health /proxy /ms/* /et/request /et/access /et/portfolio /push-subscribe /push-test", { headers: { ...CORS, 'content-type': 'text/plain' } });
+    return new Response("Kandy's Planner Worker. /health /widget /proxy /ms/* /et/request /et/access /et/portfolio /push-subscribe /push-test", { headers: { ...CORS, 'content-type': 'text/plain' } });
   },
 
   async scheduled(event, env, ctx) {
