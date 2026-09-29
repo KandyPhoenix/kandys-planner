@@ -363,6 +363,53 @@ export default {
       return new Response(body, { status: r.status, headers: { ...CORS, 'content-type': r.headers.get('content-type') || 'text/plain; charset=utf-8' } });
     }
 
+    // ── Recipe reader for Our Table (FODMAP app) "Import from link" ──
+    //    Fetches a recipe page and returns ONLY its structured Recipe data
+    //    (schema.org JSON-LD) — never the page itself — so this can't be used
+    //    as a general-purpose proxy. Public web pages only.
+    if (url.pathname === '/recipe') {
+      const target = url.searchParams.get('url') || '';
+      let t; try { t = new URL(target); } catch { return json({ ok: false, reason: 'bad-url' }, 400); }
+      const host = t.hostname.toLowerCase();
+      if (!/^https?:$/.test(t.protocol) || t.port || !host.includes('.') || host === 'localhost' ||
+          host.endsWith('.local') || host.endsWith('.internal') || /^[\d.]+$/.test(host) || host.includes(':')) {
+        return json({ ok: false, reason: 'bad-url' }, 400);
+      }
+      let r;
+      try {
+        r = await fetch(t.toString(), {
+          redirect: 'follow',
+          signal: AbortSignal.timeout(15000),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        });
+      } catch (e) { return json({ ok: false, reason: 'fetch-failed' }, 502); }
+      if (!r.ok) return json({ ok: false, reason: 'blocked', status: r.status }, 502);
+      const html = (await r.text()).slice(0, 4_000_000);
+      const found = [];
+      const walk = (n) => {
+        if (!n || typeof n !== 'object') return;
+        if (Array.isArray(n)) return n.forEach(walk);
+        const ty = n['@type'];
+        if ((Array.isArray(ty) ? ty : [ty]).includes('Recipe')) found.push(n);
+        for (const k of ['@graph', 'mainEntity', 'mainEntityOfPage', 'itemListElement']) if (n[k]) walk(n[k]);
+      };
+      for (const m of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+        try { walk(JSON.parse(m[1])); } catch { /* malformed block, skip */ }
+      }
+      const title = ((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html) || [])[1] || '').trim().slice(0, 200);
+      if (!found.length) return json({ ok: false, reason: 'no-recipe', title }, 422);
+      const x = found[0];
+      const recipe = { '@type': 'Recipe' };
+      for (const k of ['name', 'recipeYield', 'prepTime', 'cookTime', 'totalTime', 'recipeIngredient', 'recipeInstructions']) {
+        if (x[k] !== undefined) recipe[k] = x[k];
+      }
+      return json({ ok: true, url: r.url || t.toString(), title, recipe });
+    }
+
     // ── Microsoft sign-in relay (device code) — the app shows the code, the app polls ──
     if (url.pathname === '/ms/devicecode') {
       const r = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/devicecode', {
