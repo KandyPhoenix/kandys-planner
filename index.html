@@ -457,7 +457,7 @@ var TOKEN_KEY='services_planner_todoist';
 function localToken(){try{return localStorage.getItem(TOKEN_KEY)||'';}catch(e){return '';}}
 function setLocalToken(t){try{if(t)localStorage.setItem(TOKEN_KEY,t);else localStorage.removeItem(TOKEN_KEY);}catch(e){}}
 function stateJSON(){return JSON.stringify(S,function(k,v){return k==='todoistToken'?undefined:v;});} // never persist/sync the token
-var BUILD='2026-09-29-2'; // bump on every deploy so the update banner can detect a newer version
+var BUILD='2026-09-29-3'; // bump on every deploy so the update banner can detect a newer version
 var WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var TYPES=['Blog','Social','LinkedIn','SEO','Invoice','One-time','Portal','Report','Appointment','Bill','Birthday','Health','Errand','Personal','Other'];
