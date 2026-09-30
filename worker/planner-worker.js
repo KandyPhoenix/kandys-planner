@@ -145,8 +145,33 @@ function dueItemsInRange(data, startISO, endISO) {
   return out;
 }
 
+// All push subscriptions on the doc: the multi-device list plus the legacy single slot.
+// Every device that clicks "Enable Push Notifications" is added (keyed by endpoint), so the
+// PC and the phone both get reminders instead of the last one to enable stealing the slot.
+function allSubscriptions(data) {
+  const list = Array.isArray(data.pushSubscriptions) ? data.pushSubscriptions.slice() : [];
+  if (data.pushSubscription && data.pushSubscription.endpoint && !list.some((s) => s.endpoint === data.pushSubscription.endpoint)) list.push(data.pushSubscription);
+  return list.filter((s) => s && s.endpoint);
+}
+// Send to every subscription. Returns the endpoints the push service says are gone (404/410)
+// so the caller can prune them from the doc.
+async function sendPushAll(env, data, payload) {
+  const dead = [];
+  for (const sub of allSubscriptions(data)) {
+    const gone = await sendPush(env, sub, payload);
+    if (gone) dead.push(sub.endpoint);
+  }
+  return dead;
+}
+function pruneSubscriptions(data, deadEndpoints) {
+  if (!deadEndpoints.length) return false;
+  data.pushSubscriptions = allSubscriptions(data).filter((s) => !deadEndpoints.includes(s.endpoint));
+  if (data.pushSubscription && deadEndpoints.includes(data.pushSubscription.endpoint)) delete data.pushSubscription;
+  return true;
+}
+// Returns true if the subscription is dead (push service answered 404/410).
 async function sendPush(env, subscription, payload) {
-  if (!subscription || !env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return;
+  if (!subscription || !env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return false;
   try {
     const applicationServerKeys = await ApplicationServerKeys.fromJSON({
       publicKey: env.VAPID_PUBLIC_KEY,
@@ -161,7 +186,8 @@ async function sendPush(env, subscription, payload) {
     });
     const r = await fetch(endpoint, { method: 'POST', headers, body });
     if (!r.ok) console.log('push send failed', r.status, await r.text());
-  } catch (e) { console.log('push send failed', e.message); }
+    return r.status === 404 || r.status === 410;
+  } catch (e) { console.log('push send failed', e.message); return false; }
 }
 async function sendEmail(env, subject, html) {
   if (!env.RESEND_API_KEY) return;
@@ -241,7 +267,7 @@ async function runReminderCheck(env) {
     const title = '📋 Planner — ' + todayISO;
     const body = (dueToday.length ? dueToday.length + ' due today' : '') + (dueToday.length && overdueWindow.length ? ' · ' : '') + (overdueWindow.length ? overdueWindow.length + ' overdue' : '');
     const listHtml = dueToday.map((i) => `<li><strong>${i.title}</strong> (${i.client}${i.amount ? ', $' + i.amount : ''})</li>`).join('');
-    await sendPush(env, data.pushSubscription, { title, body });
+    if (pruneSubscriptions(data, await sendPushAll(env, data, { title, body }))) changed = true;
     await sendEmail(env, title, `<p>${body}</p>${listHtml ? '<ul>' + listHtml + '</ul>' : ''}`);
   }
 
@@ -254,7 +280,7 @@ async function runReminderCheck(env) {
         data.serverNotified[leadKey] = true; changed = true;
         const title = `📅 In ${days} day${days > 1 ? 's' : ''}: ${i.title}`;
         const body = `${i.client} · due ${i.date}${i.amount ? ' · $' + i.amount : ''}`;
-        await sendPush(env, data.pushSubscription, { title, body });
+        if (pruneSubscriptions(data, await sendPushAll(env, data, { title, body }))) changed = true;
         await sendEmail(env, title, `<p>${body}</p>`);
       }
     }
@@ -429,15 +455,20 @@ export default {
       const sub = await req.json().catch(() => null);
       if (!sub || !sub.endpoint) return json({ error: 'invalid subscription' }, 400);
       const data = await getPlannerJson(env);
-      data.pushSubscription = sub;
+      const list = allSubscriptions(data).filter((s) => s.endpoint !== sub.endpoint);
+      list.push(sub);
+      data.pushSubscriptions = list;
+      delete data.pushSubscription;           // legacy single slot folded into the list
       await putPlannerJson(data, env);
-      return json({ ok: true });
+      return json({ ok: true, devices: list.length });
     }
     if (url.pathname === '/push-test' && req.method === 'POST') {
       const data = await getPlannerJson(env);
-      await sendPush(env, data.pushSubscription, { title: '🔔 Test reminder', body: "Push is wired up — you're good." });
+      const subs = allSubscriptions(data);
+      const dead = await sendPushAll(env, data, { title: '🔔 Test reminder', body: "Push is wired up — you're good." });
+      if (pruneSubscriptions(data, dead)) await putPlannerJson(data, env);
       await sendEmail(env, "Test reminder — Kandy's Planner", '<p>Push + email are wired up.</p>');
-      return json({ ok: true });
+      return json({ ok: true, devices: subs.length, pruned: dead.length });
     }
 
     // ── CORS relay for allow-listed feeds/quotes ──
