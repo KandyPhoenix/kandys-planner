@@ -47,3 +47,13 @@ REM     npx wrangler secret put WIDGET_KEY --config wrangler.toml
 REM (paste the key when prompted), then deploy as above. Enter the same key in
 REM the widget app on the phone.
 REM ---------------------------------------------------------------------------
+
+REM ---------------------------------------------------------------------------
+REM Planner write route (added 2026-09-30). POST /planner with header
+REM X-Planner-Key lets Claude sessions / PC scripts mark items done, add,
+REM update or delete one-offs, and skip/unskip recurring instances, through
+REM the service account. It uses its OWN secret (never the widget's read key):
+REM     npx wrangler secret put PLANNER_WRITE_KEY --config wrangler.toml
+REM then deploy as above. See applyPlannerOps() in planner-worker.js for the
+REM operation shapes.
+REM ---------------------------------------------------------------------------

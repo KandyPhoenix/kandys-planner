@@ -84,9 +84,11 @@ async function getPlannerJson(env) {
   const doc = await r.json();
   return JSON.parse(doc.fields.json.stringValue);
 }
-async function putPlannerJson(data, env) {
+async function putPlannerJson(data, env, bumpUpdated) {
   const body = { fields: { json: { stringValue: JSON.stringify(data) } } };
-  await fetch(FIRESTORE_DOC_URL + '?updateMask.fieldPaths=json', {
+  let qs = '?updateMask.fieldPaths=json';
+  if (bumpUpdated) { body.fields.updated = { integerValue: String(Date.now()) }; qs += '&updateMask.fieldPaths=updated'; }
+  await fetch(FIRESTORE_DOC_URL + qs, {
     method: 'PATCH',
     headers: await firestoreHeaders(env, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
@@ -175,6 +177,54 @@ async function sendEmail(env, subject, html) {
   }).catch((e) => console.log('email send failed', e.message));
 }
 
+// ── Planner write operations (used by POST /planner). Pure: mutates `data`, returns a report. ──
+//    { op:'done',   id:'<oneoff id>', done?:true }          mark a one-off done/undone
+//    { op:'done',   key:'<rule id>|YYYY-MM-DD', done?:true } mark a recurring instance done/undone
+//    { op:'skip',   key:'<rule id>|YYYY-MM-DD', skip?:true } skip/unskip a recurring instance
+//    { op:'add',    item:{ title, due, client?, type?, space?, pri?, amount?, note? } }
+//    { op:'update', id:'<oneoff id>', set:{ ...fields } }   merge fields into a one-off
+//    { op:'delete', id:'<oneoff id>' }                      remove a one-off
+function applyPlannerOps(data, ops) {
+  data.oneoffs = data.oneoffs || []; data.done = data.done || {}; data.skip = data.skip || {};
+  const applied = [], errors = [];
+  const findOneoff = (id) => data.oneoffs.find((o) => o && o.id === id);
+  const isISO = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  ops.forEach((raw, i) => {
+    const op = raw || {};
+    try {
+      if (op.op === 'done' && op.id) {
+        const o = findOneoff(op.id); if (!o) throw new Error('no one-off with id ' + op.id);
+        o.done = op.done !== false; applied.push({ i, op: 'done', id: op.id, title: o.title, done: o.done });
+      } else if (op.op === 'done' && op.key) {
+        if (op.done === false) delete data.done[op.key]; else data.done[op.key] = true;
+        applied.push({ i, op: 'done', key: op.key, done: op.done !== false });
+      } else if (op.op === 'skip' && op.key) {
+        if (op.skip === false) delete data.skip[op.key]; else data.skip[op.key] = true;
+        applied.push({ i, op: 'skip', key: op.key, skip: op.skip !== false });
+      } else if (op.op === 'add' && op.item && typeof op.item === 'object') {
+        const it = op.item;
+        if (!it.title) throw new Error('add: item.title required');
+        if (it.due && !isISO(it.due)) throw new Error('add: item.due must be YYYY-MM-DD');
+        const item = Object.assign({ space: 'PM', client: 'Lori', type: 'Other', pri: false, done: false, amount: 0, note: '', subs: [] }, it);
+        if (!item.id) item.id = 'o' + Date.now() + Math.random().toString(36).slice(2, 6);
+        if (findOneoff(item.id)) throw new Error('add: id already exists ' + item.id);
+        data.oneoffs.push(item); applied.push({ i, op: 'add', id: item.id, title: item.title, due: item.due || '' });
+      } else if (op.op === 'update' && op.id && op.set && typeof op.set === 'object') {
+        const o = findOneoff(op.id); if (!o) throw new Error('no one-off with id ' + op.id);
+        if (op.set.due && !isISO(op.set.due)) throw new Error('update: due must be YYYY-MM-DD');
+        const set = Object.assign({}, op.set); delete set.id;
+        Object.assign(o, set); applied.push({ i, op: 'update', id: op.id, title: o.title, fields: Object.keys(set) });
+      } else if (op.op === 'delete' && op.id) {
+        const idx = data.oneoffs.findIndex((o) => o && o.id === op.id); if (idx < 0) throw new Error('no one-off with id ' + op.id);
+        const [gone] = data.oneoffs.splice(idx, 1); applied.push({ i, op: 'delete', id: op.id, title: gone.title });
+      } else {
+        throw new Error('unknown or incomplete op: ' + JSON.stringify(op).slice(0, 120));
+      }
+    } catch (e) { errors.push({ i, error: e.message }); }
+  });
+  return { applied, errors };
+}
+
 // ── Daily cron: due-today/overdue summary + N-day-ahead lead-time reminders ──
 async function runReminderCheck(env) {
   const data = await getPlannerJson(env);
@@ -215,7 +265,7 @@ async function runReminderCheck(env) {
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-MS-Refresh,X-ET-Token,X-ET-Secret,X-Widget-Key',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-MS-Refresh,X-ET-Token,X-ET-Secret,X-Widget-Key,X-Planner-Key',
 };
 const ALLOW = ['news.google.com', 'finance.yahoo.com'];
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, 'content-type': 'application/json' } });
@@ -289,6 +339,28 @@ export default {
         status: r.status,
         headers: { ...CORS, 'content-type': 'application/json', 'cache-control': 'no-store' },
       });
+    }
+
+    // ── Planner write route (added 2026-09-30) ──
+    //    Lets a trusted caller (Claude sessions, scripts on the PC) change planner items now
+    //    that the Firestore rules are locked. Gated by PLANNER_WRITE_KEY, a DIFFERENT secret
+    //    from the widget's read-only key, sent as X-Planner-Key. Body: { "ops": [ ... ] } —
+    //    see applyPlannerOps() for the operations. The doc is read, patched and written back
+    //    through the service account; every open planner tab picks the change up live.
+    if (url.pathname === '/planner') {
+      if (!env.PLANNER_WRITE_KEY) return json({ error: 'PLANNER_WRITE_KEY is not configured on the Worker' }, 503);
+      const key = req.headers.get('X-Planner-Key') || '';
+      if (!key || key !== env.PLANNER_WRITE_KEY) return json({ error: 'forbidden' }, 403);
+      if (req.method !== 'POST') return json({ error: 'POST { ops: [...] }' }, 405);
+      let body;
+      try { body = await req.json(); } catch { return json({ error: 'body must be JSON' }, 400); }
+      const ops = Array.isArray(body && body.ops) ? body.ops : null;
+      if (!ops || !ops.length) return json({ error: 'ops must be a non-empty array' }, 400);
+      const data = await getPlannerJson(env);
+      const result = applyPlannerOps(data, ops);
+      if (result.errors.length && !result.applied.length) return json({ error: 'no op applied', errors: result.errors }, 400);
+      await putPlannerJson(data, env, true);
+      return json({ ok: true, applied: result.applied, errors: result.errors });
     }
 
     // ── E*TRADE (OAuth 1.0a). Consumer key/secret = Worker secrets; the user's
@@ -465,7 +537,7 @@ export default {
       return json({ ok: r.ok, refresh: tk.refresh_token || rt });
     }
 
-    return new Response("Kandy's Planner Worker. /health /widget /proxy /ms/* /et/request /et/access /et/portfolio /push-subscribe /push-test", { headers: { ...CORS, 'content-type': 'text/plain' } });
+    return new Response("Kandy's Planner Worker. /health /widget /planner(POST) /proxy /ms/* /et/request /et/access /et/portfolio /push-subscribe /push-test", { headers: { ...CORS, 'content-type': 'text/plain' } });
   },
 
   async scheduled(event, env, ctx) {
