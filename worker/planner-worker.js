@@ -107,7 +107,8 @@ function dueItemsInRange(data, startISO, endISO) {
   for (const r of (data.rules || [])) {
     if (!r.active) continue;
     const rs = r.start ? parseISO(r.start) : null;
-    const ok = (d) => !rs || d >= rs;
+    const re = r.end ? parseISO(r.end) : null;
+    const ok = (d) => (!rs || d >= rs) && (!re || d <= re);
     if (r.freq === 'monthly' || r.freq === 'quarterly') {
       const anc = rs || start;
       const ancIdx = anc.getUTCFullYear() * 12 + anc.getUTCMonth();
